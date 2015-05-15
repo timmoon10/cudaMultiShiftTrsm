@@ -7,7 +7,7 @@ extern "C"
 {
 #include <cblas.h>
 }
-#include "gpuTrsms.h"
+#include "cudaMultiShiftTrsm.hpp"
 
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
@@ -127,17 +127,17 @@ int main(int argc, char **argv) {
   }
 
   // -------------------------------------------------
-  // Test gpuStrsms
+  // Test cudaMultiShiftTrsm
   // -------------------------------------------------
 
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  gpuStrsms(handle, side, uplo, trans, diag, m, n,
-	    &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
+  cudaMultiShiftTrsm(handle, side, uplo, trans, diag, m, n,
+		     &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
-  double gpuStrsmsTime
+  double cudaMstrsmTime
     = timeEnd.tv_sec - timeStart.tv_sec
     + (timeEnd.tv_usec - timeStart.tv_usec)/1e6;
 
@@ -169,16 +169,16 @@ int main(int argc, char **argv) {
   printf("\n");
   printf("Timings\n");
   printf("----------------------------------------\n");
-  printf("  gpuStrsms : %g sec\n",gpuStrsmsTime);
-  printf("  cuBLAS    : %g sec\n",cublasTime);
+  printf("  cudaMstrsm : %g sec\n",cudaMstrsmTime);
+  printf("  cuBLAS     : %g sec\n",cublasTime);
 
   // Report FLOPS
   double gflopCount = 1e-9*m*m*n; // Approximate
   printf("\n");
   printf("Performance\n");
   printf("----------------------------------------\n");
-  printf("  gpuStrsms : %g GFLOPS\n", gflopCount/gpuStrsmsTime);
-  printf("  cuBLAS    : %g GFLOPS\n", gflopCount/cublasTime);
+  printf("  cudaMstrsm : %g GFLOPS\n", gflopCount/cudaMstrsmTime);
+  printf("  cuBLAS     : %g GFLOPS\n", gflopCount/cublasTime);
   
   if(verbose) {
     // Print matrices
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
   printf("\n");
   printf("Relative error (Frobenius norm)\n");
   printf("----------------------------------------\n");
-  printf("  gpuStrsms : %g\n", relResidual);
+  printf("  cudaMstrsm : %g\n", relResidual);
 
   // -------------------------------------------------
   // Clean up and finish

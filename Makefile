@@ -5,7 +5,7 @@ INCFLAGS = -Iinclude
 LIBFLAGS = -lm -lblas -lcublas -llapack
 
 SOURCES     = $(wildcard src/*.cu)
-INCLUDES    = $(patsubst src/%.cu,include/%.h,$(SOURCES))
+INCLUDES    = $(patsubst src/%.cu,include/%.hpp,$(SOURCES))
 OBJECTS     = $(patsubst src/%.cu,obj/%.o,$(SOURCES))
 EXESOURCES  = $(wildcard *.cu)
 EXECUTABLES = $(patsubst %.cu,%,$(EXESOURCES))
