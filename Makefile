@@ -5,7 +5,7 @@ INCFLAGS = -Iinclude
 LIBFLAGS = -lm -lblas -lcublas -llapack
 
 SOURCES     = $(wildcard src/*.cu)
-INCLUDES    = $(patsubst src/%.cu,include/%.hpp,$(SOURCES))
+INCLUDES    = $(wildcard include/%.hpp)
 OBJECTS     = $(patsubst src/%.cu,obj/%.o,$(SOURCES))
 EXESOURCES  = $(wildcard *.cu)
 EXECUTABLES = $(patsubst %.cu,%,$(EXESOURCES))
@@ -18,7 +18,7 @@ obj/%.o: src/%.cu $(INCLUDES)
 	$(CC) -c $(CFLAGS) $< $(INCFLAGS) -o $@
 
 # Link executable
-%: %.cu $(OBJECTS)
+%: %.cu $(OBJECTS) $(INCLUDES)
 	$(CC) $< $(OBJECTS) $(CFLAGS) $(INCFLAGS) $(LIBFLAGS) -o $@
 
 # Prevents deleting object files

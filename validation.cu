@@ -133,8 +133,8 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cudaMultiShiftTrsm(handle, side, uplo, trans, diag, m, n,
-		     &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
+  cudaMstrsm::cudaMultiShiftTrsm<float>(handle, side, uplo, trans, diag, m, n,
+					&alpha, cuda_A, m, cuda_B, m, cuda_shifts);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cudaMstrsmTime
