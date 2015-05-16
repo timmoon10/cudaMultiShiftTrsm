@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <complex>
 #include <cuda.h>
 #include <cublas_v2.h>
 extern "C"
@@ -9,16 +10,165 @@ extern "C"
 }
 #include "cudaMultiShiftTrsm.hpp"
 
+#define datafloat float
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 using namespace std;
 
-// Function prototypes
-int main(int argc, char **argv);
-double randn();
-void gaussianRandomMatrix(int m, float *A);
-void choleskyRandomMatrix(int m, float *A);
-extern "C" void spotrf_(char *UPLO, int *N, float *A, int *LDA, int *INFO);
+// ===============================================
+// BLAS and LAPACK routines
+// ===============================================
+extern "C" 
+{
+  float snrm2_(int *n, void *x, int *incx);
+  double dnrm2_(int *n, void *x, int *incx);
+  float scnrm2_(int *n, void *x, int *incx);
+  double dznrm2_(int *n, void *x, int *incx);
+  void ssyrk_(char *uplo, char *trans, int *n, int *k,
+	      void *alpha, void *A, int *lda,
+	      void *beta, void *C, int *ldc);
+  void dsyrk_(char *uplo, char *trans, int *n, int *k,
+	      void *alpha, void *A, int *lda,
+	      void *beta, void *C, int *ldc);
+  void csyrk_(char *uplo, char *trans, int *n, int *k,
+	      void *alpha, void *A, int *lda,
+	      void *beta, void *C, int *ldc);
+  void zsyrk_(char *uplo, char *trans, int *n, int *k,
+	      void *alpha, void *A, int *lda,
+	      void *beta, void *C, int *ldc);
+  void spotrf_(char *uplo, int *n, void *A, int *lda, int *info);
+  void dpotrf_(char *uplo, int *n, void *A, int *lda, int *info);
+  void cpotrf_(char *uplo, int *n, void *A, int *lda, int *info);
+  void zpotrf_(char *uplo, int *n, void *A, int *lda, int *info);
+}
+template <typename F> inline
+double nrm2(int n, F * x, int incx);
+template <> inline
+double nrm2<float>(int n, float * x, int incx) {
+  return snrm2_(&n,x,&incx);
+}
+template <> inline
+double nrm2<double>(int n, double * x, int incx) {
+  return dnrm2_(&n,x,&incx);
+}
+template <> inline
+double nrm2<complex<float> >(int n, complex<float> * x, int incx) {
+  return scnrm2_(&n,x,&incx);
+}
+template <> inline
+double nrm2<complex<double> >(int n, complex<double> * x, int incx) {
+  return dznrm2_(&n,x,&incx);
+}
+
+template <typename F> inline
+void syrk(char uplo, char trans, int n, int k,
+	  F alpha, F * A, int lda,
+	  F beta, F * C, int ldc);
+template <> inline
+void syrk<float>(char uplo, char trans, int n, int k,
+		 float alpha, float * A, int lda,
+		 float beta, float * C, int ldc) {
+  ssyrk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
+}
+template <> inline
+void syrk<double>(char uplo, char trans, int n, int k,
+		  double alpha, double * A, int lda,
+		  double beta, double * C, int ldc) {
+  dsyrk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
+}
+template <> inline
+void syrk<complex<float> >(char uplo, char trans, int n, int k,
+			  complex<float> alpha,
+			  complex<float> * A, int lda,
+			  complex<float> beta,
+			  complex<float> * C, int ldc) {
+  csyrk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
+}
+template <> inline
+void syrk<complex<double> >(char uplo, char trans, int n, int k,
+			   complex<double> alpha,
+			   complex<double> * A, int lda,
+			   complex<double> beta,
+			   complex<double> * C, int ldc) {
+  csyrk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
+}
+template <typename F> inline
+void potrf(char uplo, int n, F * A, int lda, int &info);
+template <> inline
+void potrf<float>(char uplo, int n, float * A, int lda, int &info) {
+  spotrf_(&uplo,&n,A,&lda,&info);
+}
+template <> inline
+void potrf<double>(char uplo, int n, double * A, int lda, int &info) {
+  dpotrf_(&uplo,&n,A,&lda,&info);
+}
+template <> inline
+void potrf<complex<float> >(char uplo, int n, complex<float> * A, int lda, int &info) {
+  cpotrf_(&uplo,&n,A,&lda,&info);
+}
+template <> inline
+void potrf<complex<double> >(char uplo, int n, complex<double> * A, int lda, int &info) {
+  zpotrf_(&uplo,&n,A,&lda,&info);
+}
+
+// ===============================================
+// Random matrix generation
+// ===============================================
+
+/// Compute Gaussian random variable
+/** Uses Box-Muller transform to convert uniform distribution to
+ *  Gaussian distribution
+ */
+template <typename F>
+F randn() {
+  F u1 = ((F)rand())/RAND_MAX;
+  F u2 = ((F)rand())/RAND_MAX;
+  return sqrt(-2*log(u1))*cos(2*M_PI*u2);
+}
+template <template<typename> class complex, typename T>
+complex<T> randn() {
+  T u1 = ((T)rand())/RAND_MAX;
+  T u2 = ((T)rand())/RAND_MAX;
+  return complex<T>(sqrt(-2*log(u1))*cos(2*M_PI*u2),
+		    sqrt(-2*log(u1))*sin(2*M_PI*u2));
+}
+
+/// Generate matrix with Gaussian random variables
+/** Diagonal entries are increased to improve conditioning. Viswanath
+ *  and Trefethen (1998) find that the lower triangle of this matrix
+ *  has a condition number on the order of 2^m.
+ */
+template <typename F>
+void gaussianRandomMatrix(int m, F *A) {
+#pragma omp parallel for
+  for(int i=0;i<m*m;++i)
+    A[i] = randn<F>();
+}
+
+/// Generate matrix with Cholesky factorization of random matrix
+template <typename F>
+void choleskyRandomMatrix(int m, F *A) {
+
+  F *B = (F*) malloc(m*m*sizeof(F));
+
+  // Generate matrix with Gaussian random variables
+  gaussianRandomMatrix<F>(m,B);
+
+  // Construct positive definite matrix
+  syrk<F>('L','N',m,m,1,B,m,0,A,m);
+
+  // Perform Cholesky factorization
+  int info;
+  potrf<F>('L', m, A, m, info);
+
+  // Clean up
+  free(B);
+
+}
+
+// ===============================================
+// Validation program
+// ===============================================
 
 /// Main function
 int main(int argc, char **argv) {
@@ -68,33 +218,33 @@ int main(int argc, char **argv) {
   printf("nonUnitDiag = %d\n", nonUnitDiag);
 
   // Initialize memory on host
-  float *A = (float*) malloc(m*m*sizeof(float));
-  float *B = (float*) malloc(m*n*sizeof(float));
-  float *shifts = (float*) malloc(n*sizeof(float));
-  float *X = (float*) malloc(m*n*sizeof(float));
-  float *residual = (float*) malloc(m*n*sizeof(float));
+  datafloat *A = (datafloat*) malloc(m*m*sizeof(datafloat));
+  datafloat *B = (datafloat*) malloc(m*n*sizeof(datafloat));
+  datafloat *shifts = (datafloat*) malloc(n*sizeof(datafloat));
+  datafloat *X = (datafloat*) malloc(m*n*sizeof(datafloat));
+  datafloat *residual = (datafloat*) malloc(m*n*sizeof(datafloat));
 
   // Initialize matrices on host
-  float alpha = randn();
-  choleskyRandomMatrix(m,A);
+  datafloat alpha = randn<datafloat>();
+  choleskyRandomMatrix<datafloat>(m,A);
 #pragma omp parallel for
   for(int i=0;i<m*n;++i)
-    B[i] = randn();
+    B[i] = randn<datafloat>();
 #pragma omp parallel for
   for(int i=0;i<n;++i) {
-    shifts[i] = randn();
+    shifts[i] = randn<datafloat>();
   }
 
   // Initialize memory on device
-  float *cuda_A, *cuda_B, *cuda_B_cublas, *cuda_shifts;
-  cudaMalloc(&cuda_A, m*m*sizeof(float));
-  cudaMalloc(&cuda_B, m*n*sizeof(float));
-  cudaMalloc(&cuda_B_cublas, m*n*sizeof(float));
-  cudaMalloc(&cuda_shifts, n*sizeof(float));
-  cudaMemcpy(cuda_A, A, m*m*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(cuda_B, B, m*n*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(cuda_B_cublas, B, m*n*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(cuda_shifts, shifts, n*sizeof(float), cudaMemcpyHostToDevice);
+  datafloat *cuda_A, *cuda_B, *cuda_B_cublas, *cuda_shifts;
+  cudaMalloc(&cuda_A, m*m*sizeof(datafloat));
+  cudaMalloc(&cuda_B, m*n*sizeof(datafloat));
+  cudaMalloc(&cuda_B_cublas, m*n*sizeof(datafloat));
+  cudaMalloc(&cuda_shifts, n*sizeof(datafloat));
+  cudaMemcpy(cuda_A, A, m*m*sizeof(datafloat), cudaMemcpyHostToDevice);
+  cudaMemcpy(cuda_B, B, m*n*sizeof(datafloat), cudaMemcpyHostToDevice);
+  cudaMemcpy(cuda_B_cublas, B, m*n*sizeof(datafloat), cudaMemcpyHostToDevice);
+  cudaMemcpy(cuda_shifts, shifts, n*sizeof(datafloat), cudaMemcpyHostToDevice);
 
   // Initialize cuBLAS
   cublasHandle_t handle;
@@ -133,8 +283,8 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cudaMstrsm::cudaMultiShiftTrsm<float>(handle, side, uplo, trans, diag, m, n,
-					&alpha, cuda_A, m, cuda_B, m, cuda_shifts);
+  cudaMstrsm::cudaMultiShiftTrsm<datafloat>(handle, side, uplo, trans, diag, m, n,
+					    &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cudaMstrsmTime
@@ -142,7 +292,7 @@ int main(int argc, char **argv) {
     + (timeEnd.tv_usec - timeStart.tv_usec)/1e6;
 
   // Transfer result to host
-  cudaMemcpy(X, cuda_B, m*n*sizeof(float), 
+  cudaMemcpy(X, cuda_B, m*n*sizeof(datafloat), 
 	     cudaMemcpyDeviceToHost);
 
   // -------------------------------------------------
@@ -225,15 +375,15 @@ int main(int argc, char **argv) {
   }
 
   // Check error in solution
-  float normB = cblas_snrm2(m*n,B,1);
-  memcpy(residual,X,m*n*sizeof(float));
+  double normB = nrm2<datafloat>(m*n,B,1);
+  memcpy(residual,X,m*n*sizeof(datafloat));
   cblas_strmm(CblasColMajor,sideCblas,uploCblas,transCblas,diagCblas,
   	      m, n, 1., A, m, residual, m);
 #pragma omp parallel for
   for(int i=0;i<n;++i)
     cblas_saxpy(m, shifts[i], X+i*m, 1, residual+i*m, 1);
   cblas_saxpy(m*n, -alpha, B, 1, residual, 1);
-  float relResidual = cblas_snrm2(m*n,residual,1)/normB;
+  double relResidual = nrm2<datafloat>(m*n,residual,1)/normB;
   printf("\n");
   printf("Relative error (Frobenius norm)\n");
   printf("----------------------------------------\n");
@@ -253,58 +403,5 @@ int main(int argc, char **argv) {
   cudaFree(cuda_shifts);
   cublasDestroy(handle);
   return EXIT_SUCCESS;
-
-}
-
-/// Compute Gaussian random variable
-/** Uses Box-Muller transform to convert uniform distribution to
- *  Gaussian distribution
- */
-double randn() {
-  double u1 = ((double)rand())/RAND_MAX;
-  double u2 = ((double)rand())/RAND_MAX;
-  return sqrt(-2*log(u1))*cos(2*M_PI*u2);
-}
-
-/// Generate matrix with Gaussian random variables
-/** Diagonal entries are increased to improve conditioning. Viswanath
- *  and Trefethen (1998) find that the lower triangle of this matrix
- *  has a condition number on the order of 2^m.
- */
-void gaussianRandomMatrix(int m, float *A) {
-
-  // Each matrix entry is a Gaussian random variable
-#pragma omp parallel for
-  for(int i=0;i<m*m;++i)
-    A[i] = randn();
-  
-  // Improve conditioning by increasing diagonal
-#pragma omp parallel for
-  for(int i=0;i<m;++i)
-    A[IDX(i,i,m)] += 4.;
-
-}
-
-/// Generate matrix with Cholesky factorization of random matrix
-void choleskyRandomMatrix(int m, float *A) {
-
-  float *B = (float*) malloc(m*m*sizeof(float));
-
-  // Generate matrix with Gaussian random variables
-#pragma omp parallel for
-  for(int i=0;i<m*m;++i)
-    B[i] = randn();
-
-  // Construct positive definite matrix
-  cblas_ssyrk(CblasColMajor,CblasLower,CblasNoTrans,
-	      m,m,1.,B,m,0.,A,m);
-
-  // Perform Cholesky factorization
-  char charL = 'L';
-  int info;
-  spotrf_(&charL, &m, A, &m, &info);
-
-  // Clean up
-  free(B);
 
 }

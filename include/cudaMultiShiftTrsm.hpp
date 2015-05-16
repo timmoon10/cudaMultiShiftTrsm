@@ -1,5 +1,5 @@
-#ifndef __CUDA_MULTISHIFTTRSM__
-#define __CUDA_MULTISHIFTTRSM__
+#ifndef __CUDA_MULTISHIFTTRSM_HPP__
+#define __CUDA_MULTISHIFTTRSM_HPP__
 
 #include <stdio.h>
 #include <cuda.h>
