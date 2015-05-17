@@ -2,6 +2,7 @@
 #define __CUDA_MULTISHIFTTRSM_HPP__
 
 #include <stdio.h>
+#include <complex>
 #include <cuda.h>
 #include <cublas_v2.h>
 
@@ -15,23 +16,25 @@ namespace cudaMstrsm {
   // (For use in templated functions)
   // -------------------------------------------
   inline
-  cublasStatus_t cublasGscal(cublasHandle_t handle, int n,
-			     const float *alpha, float *x, int incx) {
+  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			    const float *alpha, float *x, int incx) {
     return cublasSscal(handle,n,alpha,x,incx);
   }
   inline
-  cublasStatus_t cublasGscal(cublasHandle_t handle, int n,
-			     const double *alpha, double *x, int incx) {
+  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			    const double *alpha, double *x, int incx) {
     return cublasDscal(handle,n,alpha,x,incx);
   }
   inline
-  cublasStatus_t cublasGscal(cublasHandle_t handle, int n,
-			     const cuComplex *alpha, cuComplex *x, int incx) {
+  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			    const cuComplex *alpha,
+			    cuComplex *x, int incx) {
     return cublasCscal(handle,n,alpha,x,incx);
   }
   inline
-  cublasStatus_t cublasGscal(cublasHandle_t handle, int n,
-			     const cuDoubleComplex *alpha, cuDoubleComplex *x, int incx) {
+  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			    const cuDoubleComplex *alpha,
+			    cuDoubleComplex *x, int incx) {
     return cublasZscal(handle,n,alpha,x,incx);
   }
   inline
@@ -92,7 +95,7 @@ namespace cudaMstrsm {
       shared_B[tid] = B[IDX(tid,blockIdx.x,ldb)];
     if(tid == 0) {
       if(shifts == 0)
-	shared_shift = 0.f;
+	shared_shift = 0.;
       else
 	shared_shift = shifts[blockIdx.x];
     }
@@ -206,15 +209,15 @@ namespace cudaMstrsm {
 
     // Scale right hand side
     for(int i=0; i<n; ++i) {
-      status = cublasGscal(handle, m, alpha, B+i*ldb, 1);
+      status = cublasScal(handle, m, alpha, B+i*ldb, 1);
       if(status != CUBLAS_STATUS_SUCCESS)
 	return status;
     }
 
     // Misc initialization
     bool nonUnitDiag = (diag  == CUBLAS_DIAG_NON_UNIT);
-    F one    = 1;
-    F negOne = -1;
+    F one    = 1.;
+    F negOne = -1.;
   
     // Perform blocked triangular solve
     int numBlocks = (m+BSIZE-1)/BSIZE;  // Number of subblocks in A
@@ -237,6 +240,43 @@ namespace cudaMstrsm {
     return CUBLAS_STATUS_SUCCESS;
 
   }
+
+  // template <>
+  // cublasStatus_t 
+  // cudaMultiShiftTrsm<std::complex<float> >(const cublasHandle_t handle,
+  // 					   const cublasSideMode_t side,
+  // 					   const cublasFillMode_t uplo,
+  // 					   const cublasOperation_t trans,
+  // 					   const cublasDiagType_t diag,
+  // 					   const int m, const int n,
+  // 					   const std::complex<float> * __restrict__ alpha,
+  // 					   const std::complex<float> * __restrict__ A,
+  // 					   const int lda,
+  // 					   std::complex<float> * __restrict__ B,
+  // 					   const int ldb,
+  // 					   const std::complex<float> * __restrict__ shifts) {
+  //   return cudaMultiShiftTrsm<cuComplex>(handle,side,uplo,trans,diag,m,n,
+  // 					 (cuComplex*)alpha,(cuComplex*)A,lda,
+  // 					 (cuComplex*)B,ldb,(cuComplex*)shifts);
+  // }
+  // template <>
+  // cublasStatus_t 
+  // cudaMultiShiftTrsm<std::complex<double> >(const cublasHandle_t handle,
+  // 					    const cublasSideMode_t side,
+  // 					    const cublasFillMode_t uplo,
+  // 					    const cublasOperation_t trans,
+  // 					    const cublasDiagType_t diag,
+  // 					    const int m, const int n,
+  // 					    const std::complex<double> * __restrict__ alpha,
+  // 					    const std::complex<double> * __restrict__ A,
+  // 					    const int lda,
+  // 					    std::complex<double> * __restrict__ B,
+  // 					    const int ldb,
+  // 					    const std::complex<double> * __restrict__ shifts) {
+  //   return cudaMultiShiftTrsm<cuDoubleComplex>(handle,side,uplo,trans,diag,m,n,
+  // 					       (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
+  // 					       (cuDoubleComplex*)B,ldb,(cuDoubleComplex*)shifts);
+  // }
 
 }
 
