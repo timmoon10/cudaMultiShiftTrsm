@@ -6,7 +6,7 @@
 #include <cublas_v2.h>
 #include "cudaMultiShiftTrsm.hpp"
 
-#define datafloat float
+#define datafloat complex<float>
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 using namespace std;
@@ -74,20 +74,24 @@ double nrm2<complex<double> >(int n, complex<double> * x, int incx) {
 template <typename F> inline
 void axpy(int n, F a, F * x, int incx, F * y, int incy);
 template <> inline
-void axpy<float>(int n, float a, float * x, int incx, float * y, int incy) {
+void axpy<float>(int n, float a, float * x, int incx,
+		 float * y, int incy) {
   saxpy_(&n,&a,x,&incx,y,&incy);
 }
 template <> inline
-void axpy<double>(int n, double a, double * x, int incx, double * y, int incy) {
+void axpy<double>(int n, double a, double * x, int incx,
+		  double * y, int incy) {
   daxpy_(&n,&a,x,&incx,y,&incy);
 }
 template <> inline
-void axpy<complex<float> >(int n, complex<float> a, complex<float> * x, int incx,
+void axpy<complex<float> >(int n, complex<float> a,
+			   complex<float> * x, int incx,
 			   complex<float> * y, int incy) {
   caxpy_(&n,&a,x,&incx,y,&incy);
 }
 template <> inline
-void axpy<complex<double> >(int n, complex<double> a, complex<double> * x, int incx,
+void axpy<complex<double> >(int n, complex<double> a,
+			    complex<double> * x, int incx,
 			    complex<double> * y, int incy) {
   zaxpy_(&n,&a,x,&incx,y,&incy);
 }
@@ -141,13 +145,15 @@ void trmm<double>(char side, char uplo, char transa, char diag,
 }
 template <> inline
 void trmm<complex<float> >(char side, char uplo, char transa, char diag, 
-			   int n, int m, complex<float> alpha, complex<float> * A, int lda,
+			   int n, int m, complex<float> alpha,
+			   complex<float> * A, int lda,
 			   complex<float> * B, int ldb) {
   ctrmm_(&side, &uplo, &transa, &diag, &n, &m, &alpha, A, &lda, B, &ldb);
 }
 template <> inline
 void trmm<complex<double> >(char side, char uplo, char transa, char diag, 
-			    int n, int m, complex<double> alpha, complex<double> * A, int lda,
+			    int n, int m, complex<double> alpha,
+			    complex<double> * A, int lda,
 			    complex<double> * B, int ldb) {
   ztrmm_(&side, &uplo, &transa, &diag, &n, &m, &alpha, A, &lda, B, &ldb);
 }
@@ -162,11 +168,13 @@ void potrf<double>(char uplo, int n, double * A, int lda, int &info) {
   dpotrf_(&uplo,&n,A,&lda,&info);
 }
 template <> inline
-void potrf<complex<float> >(char uplo, int n, complex<float> * A, int lda, int &info) {
+void potrf<complex<float> >(char uplo, int n,
+			    complex<float> * A, int lda, int &info) {
   cpotrf_(&uplo,&n,A,&lda,&info);
 }
 template <> inline
-void potrf<complex<double> >(char uplo, int n, complex<double> * A, int lda, int &info) {
+void potrf<complex<double> >(char uplo, int n,
+			     complex<double> * A, int lda, int &info) {
   zpotrf_(&uplo,&n,A,&lda,&info);
 }
 template <typename F> inline
@@ -179,8 +187,10 @@ cublasStatus_t cublasTrsm(cublasHandle_t handle,
 			  F * B, int ldb);
 template <> inline
 cublasStatus_t cublasTrsm<float>(cublasHandle_t handle,
-				 cublasSideMode_t side, cublasFillMode_t uplo,
-				 cublasOperation_t trans, cublasDiagType_t diag,
+				 cublasSideMode_t side,
+				 cublasFillMode_t uplo,
+				 cublasOperation_t trans,
+				 cublasDiagType_t diag,
 				 int m, int n,
 				 const float *alpha,
 				 const float *A, int lda,
@@ -189,8 +199,10 @@ cublasStatus_t cublasTrsm<float>(cublasHandle_t handle,
 }
 template <> inline
 cublasStatus_t cublasTrsm<double>(cublasHandle_t handle,
-				  cublasSideMode_t side, cublasFillMode_t uplo,
-				  cublasOperation_t trans, cublasDiagType_t diag,
+				  cublasSideMode_t side,
+				  cublasFillMode_t uplo,
+				  cublasOperation_t trans,
+				  cublasDiagType_t diag,
 				  int m, int n,
 				  const double *alpha,
 				  const double *A, int lda,
@@ -199,8 +211,10 @@ cublasStatus_t cublasTrsm<double>(cublasHandle_t handle,
 }
 template <> inline
 cublasStatus_t cublasTrsm<complex<float> >(cublasHandle_t handle,
-					   cublasSideMode_t side, cublasFillMode_t uplo,
-					   cublasOperation_t trans, cublasDiagType_t diag,
+					   cublasSideMode_t side,
+					   cublasFillMode_t uplo,
+					   cublasOperation_t trans,
+					   cublasDiagType_t diag,
 					   int m, int n,
 					   const complex<float> *alpha,
 					   const complex<float> *A, int lda,
@@ -210,14 +224,17 @@ cublasStatus_t cublasTrsm<complex<float> >(cublasHandle_t handle,
 }
 template <> inline
 cublasStatus_t cublasTrsm<complex<double> >(cublasHandle_t handle,
-					    cublasSideMode_t side, cublasFillMode_t uplo,
-					    cublasOperation_t trans, cublasDiagType_t diag,
+					    cublasSideMode_t side,
+					    cublasFillMode_t uplo,
+					    cublasOperation_t trans,
+					    cublasDiagType_t diag,
 					    int m, int n,
 					    const complex<double> *alpha,
 					    const complex<double> *A, int lda,
 					    complex<double> * B, int ldb) {
   return cublasZtrsm(handle,side,uplo,trans,diag,m,n,
-		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,(cuDoubleComplex*)B,ldb);
+		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
+		     (cuDoubleComplex*)B,ldb);
 }
 
 // ===============================================
@@ -391,8 +408,9 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cudaMstrsm::cudaMultiShiftTrsm<datafloat>(handle, side, uplo, trans, diag, m, n,
-					    &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
+  cudaMstrsm::cudaMultiShiftTrsm<datafloat>(handle, side, uplo, trans, diag,
+					    m, n, &alpha, cuda_A, m,
+					    cuda_B, m, cuda_shifts);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cudaMstrsmTime
@@ -438,12 +456,13 @@ int main(int argc, char **argv) {
   printf("  cudaMstrsm : %g GFLOPS\n", gflopCount/cudaMstrsmTime);
   printf("  cuBLAS     : %g GFLOPS\n", gflopCount/cublasTime);
   
+#if 0 // TODO
   if(verbose) {
     // Print matrices
     printf("\n");
     printf("Matrix entries\n");
     printf("----------------------------------------\n");
-    printf("  alpha = %g\n", alpha);
+    printf("  alpha = %g\n", alpha); // TODO
     printf("  shifts = [");
     for(int i=0;i<n;++i)
       printf("%g ", shifts[i]);
@@ -481,6 +500,7 @@ int main(int argc, char **argv) {
 	printf("]\n");
     }
   }
+#endif
 
   // Check error in solution
   double normB = nrm2<datafloat>(m*n,B,1);
