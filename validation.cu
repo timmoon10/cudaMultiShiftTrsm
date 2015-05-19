@@ -1,12 +1,14 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <iostream>
 #include <sys/time.h>
 #include <complex>
 #include <cuda.h>
 #include <cublas_v2.h>
+#include "cublasHelper.hpp"
 #include "cudaMultiShiftTrsm.hpp"
 
-#define datafloat complex<float>
+#define datafloat complex<double>
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 using namespace std;
@@ -125,7 +127,7 @@ void herk<complex<double> >(char uplo, char trans, int n, int k,
 			    complex<double> * A, int lda,
 			    complex<double> beta,
 			    complex<double> * C, int ldc) {
-  cherk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
+  zherk_(&uplo,&trans,&n,&k,&alpha,A,&lda,&beta,C,&ldc);
 }
 template <typename F> inline
 void trmm(char side, char uplo, char transa, char diag, 
@@ -176,65 +178,6 @@ template <> inline
 void potrf<complex<double> >(char uplo, int n,
 			     complex<double> * A, int lda, int &info) {
   zpotrf_(&uplo,&n,A,&lda,&info);
-}
-template <typename F> inline
-cublasStatus_t cublasTrsm(cublasHandle_t handle,
-			  cublasSideMode_t side, cublasFillMode_t uplo,
-			  cublasOperation_t trans, cublasDiagType_t diag,
-			  int m, int n,
-			  const F *alpha,
-			  const F *A, int lda,
-			  F * B, int ldb);
-template <> inline
-cublasStatus_t cublasTrsm<float>(cublasHandle_t handle,
-				 cublasSideMode_t side,
-				 cublasFillMode_t uplo,
-				 cublasOperation_t trans,
-				 cublasDiagType_t diag,
-				 int m, int n,
-				 const float *alpha,
-				 const float *A, int lda,
-				 float * B, int ldb) {
-  return cublasStrsm(handle,side,uplo,trans,diag,m,n,alpha,A,lda,B,ldb);
-}
-template <> inline
-cublasStatus_t cublasTrsm<double>(cublasHandle_t handle,
-				  cublasSideMode_t side,
-				  cublasFillMode_t uplo,
-				  cublasOperation_t trans,
-				  cublasDiagType_t diag,
-				  int m, int n,
-				  const double *alpha,
-				  const double *A, int lda,
-				  double * B, int ldb) {
-  return cublasDtrsm(handle,side,uplo,trans,diag,m,n,alpha,A,lda,B,ldb);
-}
-template <> inline
-cublasStatus_t cublasTrsm<complex<float> >(cublasHandle_t handle,
-					   cublasSideMode_t side,
-					   cublasFillMode_t uplo,
-					   cublasOperation_t trans,
-					   cublasDiagType_t diag,
-					   int m, int n,
-					   const complex<float> *alpha,
-					   const complex<float> *A, int lda,
-					   complex<float> * B, int ldb) {
-  return cublasCtrsm(handle,side,uplo,trans,diag,m,n,
-		     (cuComplex*)alpha,(cuComplex*)A,lda,(cuComplex*)B,ldb);
-}
-template <> inline
-cublasStatus_t cublasTrsm<complex<double> >(cublasHandle_t handle,
-					    cublasSideMode_t side,
-					    cublasFillMode_t uplo,
-					    cublasOperation_t trans,
-					    cublasDiagType_t diag,
-					    int m, int n,
-					    const complex<double> *alpha,
-					    const complex<double> *A, int lda,
-					    complex<double> * B, int ldb) {
-  return cublasZtrsm(handle,side,uplo,trans,diag,m,n,
-		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
-		     (cuDoubleComplex*)B,ldb);
 }
 
 // ===============================================
@@ -297,6 +240,46 @@ void choleskyRandomMatrix(int m, F *A) {
   // Clean up
   free(B);
 
+}
+
+/// Output matrix entries to stream
+template <typename F>
+void printMatrix(ostream & os, const char uplo, const char diag,
+		 const int m, const int n, 
+		 const F * A, const int lda) {
+
+  os << "    [[";
+  for(int i=0;i<m;++i) {
+    if(tolower(uplo) == 'l') {
+      for(int j=0;j<i;++j)
+	os << A[IDX(i,j,lda)] << " ";
+      if(tolower(diag)=='u')
+	os << "1 ";
+      else
+	os << A[IDX(i,i,lda)] << " ";
+      for(int j=i+1;j<n;++j)
+	os << "0 ";
+    }
+    else if(tolower(uplo) == 'u') {
+      for(int j=0;j<i;++j)
+	os << "0 ";
+      if(tolower(diag)=='u')
+	os << "1 ";
+      else
+	os << A[IDX(i,i,lda)] << " ";
+      for(int j=i+1;j<n;++j)
+	os << A[IDX(i,j,lda)] << " ";
+    }
+    else {
+      for(int j=0;j<n;++j)
+	os << A[IDX(i,j,lda)] << " ";
+    }
+    os << "]";
+    if(i<m-1)
+      os << std::endl << "    [";
+    else
+      os << "]" << std::endl;
+  }
 }
 
 // ===============================================
@@ -429,8 +412,8 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cublasTrsm<datafloat>(handle,side,uplo,trans,diag,m,n,
-			&alpha,cuda_A,m,cuda_B_cublas,m);
+  cublasTrsm(handle,side,uplo,trans,diag,m,n,
+	     &alpha,cuda_A,m,cuda_B_cublas,m);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cublasTime
@@ -456,51 +439,21 @@ int main(int argc, char **argv) {
   printf("  cudaMstrsm : %g GFLOPS\n", gflopCount/cudaMstrsmTime);
   printf("  cuBLAS     : %g GFLOPS\n", gflopCount/cublasTime);
   
-#if 0 // TODO
   if(verbose) {
     // Print matrices
-    printf("\n");
-    printf("Matrix entries\n");
-    printf("----------------------------------------\n");
-    printf("  alpha = %g\n", alpha); // TODO
-    printf("  shifts = [");
-    for(int i=0;i<n;++i)
-      printf("%g ", shifts[i]);
-    printf("]\n");
-    printf("  A =\n    [[");
-    for(int i=0;i<m;++i) {
-      for(int j=0;j<=i;++j)
-	printf("%g ", A[IDX(i,j,m)]);
-      for(int j=i+1;j<m;++j)
-	printf("0 ");
-      printf("]");
-      if(i<m-1)
-	printf("\n    [");
-      else
-	printf("]\n");
-    }
-    printf("  B =\n    [[");
-    for(int i=0;i<m;++i) {
-      for(int j=0;j<n;++j)
-	printf("%g ", B[IDX(i,j,m)]);
-      printf(" ]");
-      if(i<m-1)
-	printf("\n    [");
-      else
-	printf("]\n");
-    }
-    printf("  X =\n    [[");
-    for(int i=0;i<m;++i) {
-      for(int j=0;j<n;++j)
-	printf("%g ", X[IDX(i,j,m)]);
-      printf(" ]");
-      if(i<m-1)
-	printf("\n    [");
-      else
-	printf("]\n");
-    }
+    std::cout << std::endl
+	      << "Matrix entries" << std::endl
+	      << "----------------------------------------" << std::endl
+	      << "  alpha = " << alpha << std::endl;
+    std::cout << "  shifts =" << std::endl;
+    printMatrix<datafloat>(std::cout,'N','N',1,n,shifts,1);
+    std::cout << "  A =" << std::endl;
+    printMatrix<datafloat>(std::cout,'L','N',m,m,A,m);
+    std::cout << "  B =" << std::endl;
+    printMatrix<datafloat>(std::cout,'N','N',m,n,B,m);
+    std::cout << "  X =" << std::endl;
+    printMatrix<datafloat>(std::cout,'N','N',m,n,X,m);
   }
-#endif
 
   // Check error in solution
   double normB = nrm2<datafloat>(m*n,B,1);

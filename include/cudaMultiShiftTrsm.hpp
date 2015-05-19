@@ -2,82 +2,18 @@
 #include <complex>
 #include <cuda.h>
 #include <cublas_v2.h>
+#include "cublasHelper.hpp"
 #include "cuComplexHelper.hpp"
 
 #ifndef __CUDA_MULTISHIFTTRSM_HPP__
 #define __CUDA_MULTISHIFTTRSM_HPP__
 
-#define BSIZE 32 // CUDA warp size
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 namespace cudaMstrsm {
-  
-  // -------------------------------------------
-  // cuBLAS Functions
-  // (For use in templated functions)
-  // -------------------------------------------
-  inline
-  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
-			    const float *alpha, float *x, int incx) {
-    return cublasSscal(handle,n,alpha,x,incx);
-  }
-  inline
-  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
-			    const double *alpha, double *x, int incx) {
-    return cublasDscal(handle,n,alpha,x,incx);
-  }
-  inline
-  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
-			    const cuComplex *alpha,
-			    cuComplex *x, int incx) {
-    return cublasCscal(handle,n,alpha,x,incx);
-  }
-  inline
-  cublasStatus_t cublasScal(cublasHandle_t handle, int n,
-			    const cuDoubleComplex *alpha,
-			    cuDoubleComplex *x, int incx) {
-    return cublasZscal(handle,n,alpha,x,incx);
-  }
-  inline
-  cublasStatus_t cublasGgemm(cublasHandle_t handle, cublasOperation_t transa,
-			     cublasOperation_t transb, int m, int n, int k,
-			     const float *alpha, const float *A, int lda,
-			     const float *B, int ldb,
-			     const float *beta, float *C, int ldc) {
-    return cublasSgemm(handle,transa,transb,m,n,k,alpha,
-		       A,lda,B,ldb,beta,C,ldc);
-  }
-  inline
-  cublasStatus_t cublasGgemm(cublasHandle_t handle, cublasOperation_t transa,
-			     cublasOperation_t transb, int m, int n, int k,
-			     const double *alpha, const double *A, int lda,
-			     const double *B, int ldb,
-			     const double *beta, double *C, int ldc) {
-    return cublasDgemm(handle,transa,transb,m,n,k,
-		       alpha,A,lda,B,ldb,beta,C,ldc);
-  }
-  inline
-  cublasStatus_t cublasGgemm(cublasHandle_t handle, cublasOperation_t transa,
-			     cublasOperation_t transb, int m, int n, int k,
-			     const cuFloatComplex *alpha,
-			     const cuFloatComplex *A, int lda,
-			     const cuFloatComplex *B, int ldb,
-			     const cuFloatComplex *beta,
-			     cuFloatComplex *C, int ldc) {
-    return cublasCgemm(handle,transa,transb,m,n,k,
-		       alpha,A,lda,B,ldb,beta,C,ldc);
-  }
-  inline
-  cublasStatus_t cublasGgemm(cublasHandle_t handle, cublasOperation_t transa,
-			     cublasOperation_t transb, int m, int n, int k,
-			     const cuDoubleComplex *alpha,
-			     const cuDoubleComplex *A, int lda,
-			     const cuDoubleComplex *B, int ldb,
-			     const cuDoubleComplex *beta,
-			     cuDoubleComplex *C, int ldc) {
-    return cublasZgemm(handle,transa,transb,m,n,k,alpha,
-		       A,lda,B,ldb,beta,C,ldc);
-  }
+
+  // CUDA warp size
+  const int BSIZE = 32; 
 
   // -------------------------------------------
   // CUDA Kernels
@@ -121,17 +57,17 @@ namespace cudaMstrsm {
 	// Obtain ith row of solution
 	if(tid==i) {
 	  if(diag)
-	    shared_B[tid] = shared_B[tid]/(private_A+shared_shift);
+	    shared_B[tid] /= private_A+shared_shift;
 	  else {
 	    // If matrix is unit diagonal
-	    shared_B[tid] = shared_B[tid]/(1+shared_shift);
+	    shared_B[tid] /= 1+shared_shift;
 	  }
 	}
 
 	// Update remaining rows of RHS matrix
 	__syncthreads();
 	if(tid>i)
-	  shared_B[tid] = shared_B[tid] - private_A*shared_B[i];
+	  shared_B[tid] -= private_A*shared_B[i];
       }
     }
 
@@ -273,18 +209,18 @@ namespace cudaMstrsm {
   }
   template <> inline
   cublasStatus_t 
-  cudaMultiShiftTrsm<cuComplex>(const cublasHandle_t handle,
-				const cublasSideMode_t side,
-				const cublasFillMode_t uplo,
-				const cublasOperation_t trans,
-				const cublasDiagType_t diag,
-				const int m, const int n,
-				const cuComplex * __restrict__ alpha,
-				const cuComplex * __restrict__ A,
-				const int lda,
-				cuComplex * __restrict__ B,
-				const int ldb,
-				const cuComplex * __restrict__ shifts) {
+  cudaMultiShiftTrsm<cuFloatComplex>(const cublasHandle_t handle,
+				     const cublasSideMode_t side,
+				     const cublasFillMode_t uplo,
+				     const cublasOperation_t trans,
+				     const cublasDiagType_t diag,
+				     const int m, const int n,
+				     const cuFloatComplex * __restrict__ alpha,
+				     const cuFloatComplex * __restrict__ A,
+				     const int lda,
+				     cuFloatComplex * __restrict__ B,
+				     const int ldb,
+				     const cuFloatComplex * __restrict__ shifts) {
     return cudaMultiShiftTrsm<cuFloatComplexFull>(handle,side,uplo,trans,diag,
 						  m,n,
 						  (cuFloatComplexFull*)alpha,
@@ -292,24 +228,48 @@ namespace cudaMstrsm {
 						  (cuFloatComplexFull*)B,ldb,
 						  (cuFloatComplexFull*)shifts);
   }
-  // template <>
-  // cublasStatus_t 
-  // cudaMultiShiftTrsm<std::complex<double> >(const cublasHandle_t handle,
-  // 					    const cublasSideMode_t side,
-  // 					    const cublasFillMode_t uplo,
-  // 					    const cublasOperation_t trans,
-  // 					    const cublasDiagType_t diag,
-  // 					    const int m, const int n,
-  // 					    const std::complex<double> * __restrict__ alpha,
-  // 					    const std::complex<double> * __restrict__ A,
-  // 					    const int lda,
-  // 					    std::complex<double> * __restrict__ B,
-  // 					    const int ldb,
-  // 					    const std::complex<double> * __restrict__ shifts) {
-  //   return cudaMultiShiftTrsm<cuDoubleComplex>(handle,side,uplo,trans,diag,m,n,
-  // 					       (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
-  // 					       (cuDoubleComplex*)B,ldb,(cuDoubleComplex*)shifts);
-  // }
+  template <> inline
+  cublasStatus_t 
+  cudaMultiShiftTrsm<std::complex<double> >(const cublasHandle_t handle,
+					    const cublasSideMode_t side,
+					    const cublasFillMode_t uplo,
+					    const cublasOperation_t trans,
+					    const cublasDiagType_t diag,
+					    const int m, const int n,
+					    const std::complex<double> * __restrict__ alpha,
+					    const std::complex<double> * __restrict__ A,
+					    const int lda,
+					    std::complex<double> * __restrict__ B,
+					    const int ldb,
+					    const std::complex<double> * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuDoubleComplexFull>(handle,side,uplo,trans,diag,
+						   m,n,
+						   (cuDoubleComplexFull*)alpha,
+						   (cuDoubleComplexFull*)A,lda,
+						   (cuDoubleComplexFull*)B,ldb,
+						   (cuDoubleComplexFull*)shifts);
+  }
+  template <> inline
+  cublasStatus_t 
+  cudaMultiShiftTrsm<cuDoubleComplex>(const cublasHandle_t handle,
+				      const cublasSideMode_t side,
+				      const cublasFillMode_t uplo,
+				      const cublasOperation_t trans,
+				      const cublasDiagType_t diag,
+				      const int m, const int n,
+				      const cuDoubleComplex * __restrict__ alpha,
+				      const cuDoubleComplex * __restrict__ A,
+				      const int lda,
+				      cuDoubleComplex * __restrict__ B,
+				      const int ldb,
+				      const cuDoubleComplex * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuDoubleComplexFull>(handle,side,uplo,trans,diag,
+						   m,n,
+						   (cuDoubleComplexFull*)alpha,
+						   (cuDoubleComplexFull*)A,lda,
+						   (cuDoubleComplexFull*)B,ldb,
+						   (cuDoubleComplexFull*)shifts);
+  }
 
 }
 

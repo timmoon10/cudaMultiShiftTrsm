@@ -304,141 +304,171 @@ cuDoubleComplex operator/(const cuFloatComplex  & a,
 }
 
 // Addition assignment
+__host__ __device__ inline
 cuFloatComplex& operator+=(cuFloatComplex & a, const cuFloatComplex & b) {
   a.x += b.x;
   a.y += b.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator+=(cuFloatComplex & a, const cuDoubleComplex & b) {
   a.x += b.x;
   a.y += b.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator+=(cuFloatComplex & a, const float b) {
   a.x += b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator+=(cuFloatComplex & a, const double b) {
   a.x += b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator+=(cuFloatComplex & a, const int b) {
   a.x += b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator+=(cuDoubleComplex & a, const cuFloatComplex & b) {
   a.x += b.x;
   a.y += b.y;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator+=(cuDoubleComplex & a, const cuDoubleComplex & b) {
   a.x += b.x;
   a.y += b.y;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator+=(cuDoubleComplex & a, const float b) {
   a.x += b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator+=(cuDoubleComplex & a, const double b) {
   a.x += b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator+=(cuDoubleComplex & a, const int b) {
   a.x += b;
   return a;
 }
 
 // Subtraction assignment
+__host__ __device__ inline
 cuFloatComplex& operator-=(cuFloatComplex & a, const cuFloatComplex & b) {
   a.x -= b.x;
   a.y -= b.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator-=(cuFloatComplex & a, const cuDoubleComplex & b) {
   a.x -= b.x;
   a.y -= b.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator-=(cuFloatComplex & a, const float b) {
   a.x -= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator-=(cuFloatComplex & a, const double b) {
   a.x -= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator-=(cuFloatComplex & a, const int b) {
   a.x -= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator-=(cuDoubleComplex & a, const cuFloatComplex & b) {
   a.x -= b.x;
   a.y -= b.y;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator-=(cuDoubleComplex & a, const cuDoubleComplex & b) {
   a.x -= b.x;
   a.y -= b.y;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator-=(cuDoubleComplex & a, const float b) {
   a.x -= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator-=(cuDoubleComplex & a, const double b) {
   a.x -= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator-=(cuDoubleComplex & a, const int b) {
   a.x -= b;
   return a;
 }
 
 // Multiplication assignment
+__host__ __device__ inline
 cuFloatComplex& operator*=(cuFloatComplex & a, const cuFloatComplex & b) {
   a = a*b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator*=(cuFloatComplex & a, const cuDoubleComplex & b) {
   cuDoubleComplex temp = a*b;
   a.x = temp.x;
   a.y = temp.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator*=(cuFloatComplex & a, const float b) {
   a.x *= b;
   a.y *= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator*=(cuFloatComplex & a, const double b) {
   a.x *= b;
   a.y *= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator*=(cuFloatComplex & a, const int b) {
   a.x *= b;
   a.y *= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator*=(cuDoubleComplex & a, const cuFloatComplex & b) {
   a = a*b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator*=(cuDoubleComplex & a, const cuDoubleComplex & b) {
   a = a*b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator*=(cuDoubleComplex & a, const float b) {
   a.x *= b;
   a.y *= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator*=(cuDoubleComplex & a, const double b) {
   a.x *= b;
   a.y *= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator*=(cuDoubleComplex & a, const int b) {
   a.x *= b;
   a.y *= b;
@@ -446,49 +476,59 @@ cuDoubleComplex& operator*=(cuDoubleComplex & a, const int b) {
 }
 
 // Division assignment
+__host__ __device__ inline
 cuFloatComplex& operator/=(cuFloatComplex & a, const cuFloatComplex & b) {
   a = a/b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator/=(cuFloatComplex & a, const cuDoubleComplex & b) {
   cuDoubleComplex temp = a/b;
   a.x = temp.x;
   a.y = temp.y;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator/=(cuFloatComplex & a, const float b) {
   a.x /= b;
   a.y /= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator/=(cuFloatComplex & a, const double b) {
   a.x /= b;
   a.y /= b;
   return a;
 }
+__host__ __device__ inline
 cuFloatComplex& operator/=(cuFloatComplex & a, const int b) {
   a.x /= b;
   a.y /= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator/=(cuDoubleComplex & a, const cuFloatComplex & b) {
   a = a/b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator/=(cuDoubleComplex & a, const cuDoubleComplex & b) {
   a = a/b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator/=(cuDoubleComplex & a, const float b) {
   a.x /= b;
   a.y /= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator/=(cuDoubleComplex & a, const double b) {
   a.x /= b;
   a.y /= b;
   return a;
 }
+__host__ __device__ inline
 cuDoubleComplex& operator/=(cuDoubleComplex & a, const int b) {
   a.x /= b;
   a.y /= b;
@@ -544,15 +584,15 @@ public:
   }
   __host__ __device__ cuDoubleComplexFull(const float z) {
     x = z;
-    y = 0.f;
+    y = 0.;
   }
   __host__ __device__ cuDoubleComplexFull(const double z) {
     x = z;
-    y = 0.f;
+    y = 0.;
   }
   __host__ __device__ cuDoubleComplexFull(const int z) {
     x = z;
-    y = 0.f;
+    y = 0.;
   }
 
 };
