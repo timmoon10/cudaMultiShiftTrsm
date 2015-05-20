@@ -8,27 +8,32 @@
 #ifndef __CUDA_MULTISHIFTTRSM_HPP__
 #define __CUDA_MULTISHIFTTRSM_HPP__
 
-#define IDX(i,j,ld) ((i)+(j)*(ld))
-
 namespace cudaMstrsm {
 
+  // -------------------------------------------
+  // Misc
+  // -------------------------------------------
+
   // CUDA warp size
-  const int BSIZE = 32; 
+  const int BSIZE = 32;
+  // Matrix entry index with Fortran ordering
+  __host__ __device__ inline
+  int idx(int i,int j,int ld) {return i+j*ld;}
 
   // -------------------------------------------
   // CUDA Kernels
   // -------------------------------------------
 
-  /// Solve triangular systems with multiple shifts
+  /// Solve triangular systems with multiple shifts (LLN case)
   template <typename F>
-  __global__ void mstrsmBlock(const bool diag,
-			      const int m,
-			      const int n,
-			      const F * __restrict__ A,
-			      const int lda,
-			      F * __restrict__ B,
-			      const int ldb,
-			      const F * __restrict__ shifts) {
+  __global__ void LLN_block(const bool unitDiag,
+			    const int m,
+			    const int n,
+			    const F * __restrict__ A,
+			    const int lda,
+			    F * __restrict__ B,
+			    const int ldb,
+			    const F * __restrict__ shifts) {
 
     // Initialize indices
     int tid = threadIdx.x;
@@ -37,10 +42,10 @@ namespace cudaMstrsm {
     __shared__ F shared_B[BSIZE];
     __shared__ F shared_shift;
     if(tid < m)
-      shared_B[tid] = B[IDX(tid,blockIdx.x,ldb)];
+      shared_B[tid] = B[idx(tid,blockIdx.x,ldb)];
     if(tid == 0) {
       if(shifts == 0)
-	shared_shift = 0.;
+	shared_shift = 0;
       else
 	shared_shift = shifts[blockIdx.x];
     }
@@ -48,32 +53,83 @@ namespace cudaMstrsm {
     // Perform forward substitution
     for(int i=0; i<m; ++i) {
 
-      if(i<=tid && tid<m) {
+      // Copy global memory to private memory
+      F private_A;
+      __syncthreads();
+      if(i<=tid && tid<m)
+	private_A = A[idx(tid,i,lda)];
+      if(unitDiag && tid==i)
+	private_A = 1;
 
-	// Copy global memory to private memory
-	__syncthreads();
-	F private_A = A[IDX(tid,i,lda)];
+      // Obtain ith row of solution
+      if(tid==i)
+	shared_B[i] /= private_A + shared_shift;
 
-	// Obtain ith row of solution
-	if(tid==i) {
-	  if(diag)
-	    shared_B[tid] /= private_A+shared_shift;
-	  else {
-	    // If matrix is unit diagonal
-	    shared_B[tid] /= 1+shared_shift;
-	  }
-	}
+      // Update remaining rows of RHS matrix
+      __syncthreads();
+      if(tid>i)
+	shared_B[tid] -= private_A*shared_B[i];
 
-	// Update remaining rows of RHS matrix
-	__syncthreads();
-	if(tid>i)
-	  shared_B[tid] -= private_A*shared_B[i];
-      }
     }
 
     // Copy shared memory to global memory
+    __syncthreads();
     if(tid < m)
-      B[IDX(tid,blockIdx.x,ldb)] = shared_B[tid];
+      B[idx(tid,blockIdx.x,ldb)] = shared_B[tid];
+  }
+
+  /// Solve triangular systems with multiple shifts (LUN case)
+  template <typename F>
+  __global__ void LUN_block(const bool unitDiag,
+			    const int m,
+			    const int n,
+			    const F * __restrict__ A,
+			    const int lda,
+			    F * __restrict__ B,
+			    const int ldb,
+			    const F * __restrict__ shifts) {
+
+    // Initialize indices
+    int tid = threadIdx.x;
+
+    // Copy global memory to shared memory
+    __shared__ F shared_B[BSIZE];
+    __shared__ F shared_shift;
+    if(tid < m)
+      shared_B[tid] = B[idx(tid,blockIdx.x,ldb)];
+    if(tid == 0) {
+      if(shifts == 0)
+	shared_shift = 0;
+      else
+	shared_shift = shifts[blockIdx.x];
+    }
+
+    // Perform backward substitution
+    for(int i=m-1; i>=0; --i) {
+
+      // Copy global memory to private memory
+      F private_A;
+      __syncthreads();
+      if(tid<=i)
+	private_A = A[idx(tid,i,lda)];
+      if(unitDiag && tid==i)
+	private_A = 1;
+
+      // Obtain ith row of solution
+      if(tid==i)
+	shared_B[tid] /= private_A+shared_shift;
+
+      // Update remaining rows of RHS matrix
+      __syncthreads();
+      if(tid<i)
+	shared_B[tid] -= private_A*shared_B[i];
+      
+    }
+
+    // Copy shared memory to global memory
+    __syncthreads();
+    if(tid < m)
+      B[idx(tid,blockIdx.x,ldb)] = shared_B[tid];
   }
 
   // -------------------------------------------
@@ -102,19 +158,19 @@ namespace cudaMstrsm {
 
     // Report invalid parameters
     if(m < 0) {
-      printf("Error (gpuStrsms): argument 6 is invalid (m<0)\n");
+      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 6 is invalid (m<0)\n");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(n < 0) {
-      printf("Error (gpuStrsms): argument 7 is invalid (n<0)\n");
+      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 7 is invalid (n<0)\n");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(lda < max(1,m)){
-      printf("Error (gpuStrsms): argument 10 is invalid (lda<max(1,m))\n");
+      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 10 is invalid (lda<max(1,m))\n");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(ldb < max(1,m)) {
-      printf("Error (gpuStrsms): argument 12 is invalid (lda<max(1,m))\n");
+      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 12 is invalid (lda<max(1,m))\n");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
 
@@ -122,19 +178,13 @@ namespace cudaMstrsm {
     // TODO: remove this section when possible
     if(side != CUBLAS_SIDE_LEFT) {
       fprintf(stderr,
-	      "ERROR in gpuStrsms: invalid input in argument 2\n"
+	      "Error (cudaMultiShiftTrsm): invalid input in argument 2\n"
 	      "  side=CUBLAS_SIDE_RIGHT is not yet implemented\n");
-      return CUBLAS_STATUS_NOT_SUPPORTED;
-    }
-    if(uplo != CUBLAS_FILL_MODE_LOWER) {
-      fprintf(stderr,
-	      "ERROR in gpuStrsms: invalid input in argument 3\n"
-	      "  uplo=CUBLAS_FILL_MODE_UPPER is not yet implemented\n");
       return CUBLAS_STATUS_NOT_SUPPORTED;
     }
     if(trans != CUBLAS_OP_N) {
       fprintf(stderr,
-	      "ERROR in gpuStrsms: invalid input in argument 4\n"
+	      "Error (cudaMultiShiftTrsm): invalid input in argument 4\n"
 	      "  trans=CUBLAS_OP_T and trans=CUBLAS_OP_C are not yet implemented\n");
       return CUBLAS_STATUS_NOT_SUPPORTED;
     }
@@ -160,27 +210,53 @@ namespace cudaMstrsm {
     }
 
     // Misc initialization
-    bool nonUnitDiag = (diag  == CUBLAS_DIAG_NON_UNIT);
-    F one    = 1.;
-    F negOne = -1.;
-  
-    // Perform blocked triangular solve
+    bool unitDiag = (diag==CUBLAS_DIAG_UNIT);
+    F one    = 1;
+    F negOne = -1;
     int numBlocks = (m+BSIZE-1)/BSIZE;  // Number of subblocks in A
-    int i = 0;                          // Current row in A
-    for(int b=0; b<numBlocks-1; ++b) {
-      mstrsmBlock <<< n, BSIZE, 0, stream >>>
-	(nonUnitDiag, BSIZE,n,A+i+i*lda,lda,B+i,ldb,shifts);
-      status = cublasGgemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
-			   m-(i+BSIZE),n,BSIZE,
-			   &negOne, A+i+BSIZE+i*lda, lda,
-			   B+i,ldb, &one, B+i+BSIZE, ldb);
-      if(status != CUBLAS_STATUS_SUCCESS)
-	return status;
-      i += BSIZE;
+  
+    // LLN case
+    if(side==CUBLAS_SIDE_LEFT
+       && uplo==CUBLAS_FILL_MODE_LOWER
+       && trans==CUBLAS_OP_N) {
+      
+      int i = 0;  // Current row in A
+      for(int b=0; b<numBlocks-1; ++b) {
+	LLN_block <<< n, BSIZE, 0, stream >>>
+	  (unitDiag, BSIZE,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
+	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
+			    m-(i+BSIZE),n,BSIZE,
+			    &negOne, A+idx(i+BSIZE,i,lda), lda,
+			    B+i,ldb, &one, B+i+BSIZE, ldb);
+	if(status != CUBLAS_STATUS_SUCCESS)
+	  return status;
+	i += BSIZE;
+      }
+      LLN_block <<< n, BSIZE, 0, stream >>>
+	(unitDiag,m-i,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
     }
-    mstrsmBlock <<< n, BSIZE, 0, stream >>>
-      (nonUnitDiag,m-i,n,A+i+i*lda,lda,B+i,ldb,shifts);
 
+    // LUN case
+    else if(side==CUBLAS_SIDE_LEFT
+       && uplo==CUBLAS_FILL_MODE_UPPER
+       && trans==CUBLAS_OP_N) {
+
+      int i = m-BSIZE; // Current row in A
+      for(int b=numBlocks-1; b>0; --b) {
+	LUN_block <<< n, BSIZE, 0, stream >>>
+	  (unitDiag,BSIZE,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
+	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
+			    i,n,BSIZE,&negOne,A+idx(0,i,lda),lda,
+			    B+i,ldb,&one,B,ldb);
+	if(status != CUBLAS_STATUS_SUCCESS)
+	  return status;
+	i -= BSIZE;
+      }
+      LUN_block <<< n, BSIZE, 0, stream >>>
+	(unitDiag,i+BSIZE,n,A,lda,B,ldb,shifts);
+
+    }
+    
     // Function has completed successfully
     return CUBLAS_STATUS_SUCCESS;
 
@@ -188,87 +264,63 @@ namespace cudaMstrsm {
 
   template <> inline
   cublasStatus_t 
-  cudaMultiShiftTrsm<std::complex<float> >(const cublasHandle_t handle,
-  					   const cublasSideMode_t side,
-  					   const cublasFillMode_t uplo,
-  					   const cublasOperation_t trans,
-  					   const cublasDiagType_t diag,
-  					   const int m, const int n,
-  					   const std::complex<float> * __restrict__ alpha,
-  					   const std::complex<float> * __restrict__ A,
-  					   const int lda,
-  					   std::complex<float> * __restrict__ B,
-  					   const int ldb,
-  					   const std::complex<float> * __restrict__ shifts) {
-    return cudaMultiShiftTrsm<cuFloatComplexFull>(handle,side,uplo,trans,diag,
-						  m,n,
-						  (cuFloatComplexFull*)alpha,
-						  (cuFloatComplexFull*)A,lda,
-						  (cuFloatComplexFull*)B,ldb,
-						  (cuFloatComplexFull*)shifts);
+  cudaMultiShiftTrsm<std::complex<float> >
+  (const cublasHandle_t handle,
+   const cublasSideMode_t side, const cublasFillMode_t uplo,
+   const cublasOperation_t trans, const cublasDiagType_t diag,
+   const int m, const int n, const std::complex<float> * __restrict__ alpha,
+   const std::complex<float> * __restrict__ A, const int lda,
+   std::complex<float> * __restrict__ B, const int ldb,
+   const std::complex<float> * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuFloatComplexFull>
+      (handle,side,uplo,trans,diag,m,n,(cuFloatComplexFull*)alpha,
+       (cuFloatComplexFull*)A,lda,(cuFloatComplexFull*)B,ldb,
+       (cuFloatComplexFull*)shifts);
   }
   template <> inline
   cublasStatus_t 
-  cudaMultiShiftTrsm<cuFloatComplex>(const cublasHandle_t handle,
-				     const cublasSideMode_t side,
-				     const cublasFillMode_t uplo,
-				     const cublasOperation_t trans,
-				     const cublasDiagType_t diag,
-				     const int m, const int n,
-				     const cuFloatComplex * __restrict__ alpha,
-				     const cuFloatComplex * __restrict__ A,
-				     const int lda,
-				     cuFloatComplex * __restrict__ B,
-				     const int ldb,
-				     const cuFloatComplex * __restrict__ shifts) {
-    return cudaMultiShiftTrsm<cuFloatComplexFull>(handle,side,uplo,trans,diag,
-						  m,n,
-						  (cuFloatComplexFull*)alpha,
-						  (cuFloatComplexFull*)A,lda,
-						  (cuFloatComplexFull*)B,ldb,
-						  (cuFloatComplexFull*)shifts);
+  cudaMultiShiftTrsm<cuFloatComplex>
+  (const cublasHandle_t handle,
+   const cublasSideMode_t side, const cublasFillMode_t uplo,
+   const cublasOperation_t trans, const cublasDiagType_t diag,
+   const int m, const int n, const cuFloatComplex * __restrict__ alpha,
+   const cuFloatComplex * __restrict__ A, const int lda,
+   cuFloatComplex * __restrict__ B, const int ldb,
+   const cuFloatComplex * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuFloatComplexFull>
+      (handle,side,uplo,trans,diag,m,n,(cuFloatComplexFull*)alpha,
+       (cuFloatComplexFull*)A,lda,(cuFloatComplexFull*)B,ldb,
+       (cuFloatComplexFull*)shifts);
   }
   template <> inline
   cublasStatus_t 
-  cudaMultiShiftTrsm<std::complex<double> >(const cublasHandle_t handle,
-					    const cublasSideMode_t side,
-					    const cublasFillMode_t uplo,
-					    const cublasOperation_t trans,
-					    const cublasDiagType_t diag,
-					    const int m, const int n,
-					    const std::complex<double> * __restrict__ alpha,
-					    const std::complex<double> * __restrict__ A,
-					    const int lda,
-					    std::complex<double> * __restrict__ B,
-					    const int ldb,
-					    const std::complex<double> * __restrict__ shifts) {
-    return cudaMultiShiftTrsm<cuDoubleComplexFull>(handle,side,uplo,trans,diag,
-						   m,n,
-						   (cuDoubleComplexFull*)alpha,
-						   (cuDoubleComplexFull*)A,lda,
-						   (cuDoubleComplexFull*)B,ldb,
-						   (cuDoubleComplexFull*)shifts);
+  cudaMultiShiftTrsm<std::complex<double> >
+  (const cublasHandle_t handle,
+   const cublasSideMode_t side, const cublasFillMode_t uplo,
+   const cublasOperation_t trans, const cublasDiagType_t diag,
+   const int m, const int n, const std::complex<double> * __restrict__ alpha,
+   const std::complex<double> * __restrict__ A, const int lda,
+   std::complex<double> * __restrict__ B, const int ldb,
+   const std::complex<double> * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuDoubleComplexFull>
+      (handle,side,uplo,trans,diag,m,n,(cuDoubleComplexFull*)alpha,
+       (cuDoubleComplexFull*)A,lda,(cuDoubleComplexFull*)B,ldb,
+       (cuDoubleComplexFull*)shifts);
   }
   template <> inline
   cublasStatus_t 
-  cudaMultiShiftTrsm<cuDoubleComplex>(const cublasHandle_t handle,
-				      const cublasSideMode_t side,
-				      const cublasFillMode_t uplo,
-				      const cublasOperation_t trans,
-				      const cublasDiagType_t diag,
-				      const int m, const int n,
-				      const cuDoubleComplex * __restrict__ alpha,
-				      const cuDoubleComplex * __restrict__ A,
-				      const int lda,
-				      cuDoubleComplex * __restrict__ B,
-				      const int ldb,
-				      const cuDoubleComplex * __restrict__ shifts) {
-    return cudaMultiShiftTrsm<cuDoubleComplexFull>(handle,side,uplo,trans,diag,
-						   m,n,
-						   (cuDoubleComplexFull*)alpha,
-						   (cuDoubleComplexFull*)A,lda,
-						   (cuDoubleComplexFull*)B,ldb,
-						   (cuDoubleComplexFull*)shifts);
+  cudaMultiShiftTrsm<cuDoubleComplex>
+  (const cublasHandle_t handle,
+   const cublasSideMode_t side, const cublasFillMode_t uplo,
+   const cublasOperation_t trans, const cublasDiagType_t diag,
+   const int m, const int n, const cuDoubleComplex * __restrict__ alpha,
+   const cuDoubleComplex * __restrict__ A, const int lda,
+   cuDoubleComplex * __restrict__ B, const int ldb,
+   const cuDoubleComplex * __restrict__ shifts) {
+    return cudaMultiShiftTrsm<cuDoubleComplexFull>
+      (handle,side,uplo,trans,diag,m,n,(cuDoubleComplexFull*)alpha,
+       (cuDoubleComplexFull*)A,lda,(cuDoubleComplexFull*)B,ldb,
+       (cuDoubleComplexFull*)shifts);
   }
 
 }

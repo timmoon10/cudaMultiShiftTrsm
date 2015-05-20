@@ -536,7 +536,7 @@ cuDoubleComplex& operator/=(cuDoubleComplex & a, const int b) {
 }
 
 // ===============================================
-// Child classes with additional constructors
+// Derived classes with additional constructors
 // ===============================================
 
 struct cuFloatComplexFull : public cuFloatComplex {

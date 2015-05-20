@@ -8,7 +8,7 @@
 #include "cublasHelper.hpp"
 #include "cudaMultiShiftTrsm.hpp"
 
-#define datafloat complex<double>
+#define datafloat float
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 using namespace std;
@@ -215,55 +215,55 @@ complex<double> randn<complex<double> >() {
  *  has a condition number on the order of 2^m.
  */
 template <typename F>
-void gaussianRandomMatrix(int m, F *A) {
+void randn(int n, F *A) {
 #pragma omp parallel for
-  for(int i=0;i<m*m;++i)
+  for(int i=0;i<n;++i)
     A[i] = randn<F>();
 }
 
 /// Generate matrix with Cholesky factorization of random matrix
 template <typename F>
-void choleskyRandomMatrix(int m, F *A) {
-
-  F *B = (F*) malloc(m*m*sizeof(F));
+void choleskyRandomMatrix(char uplo, int m, F *A) {
 
   // Generate matrix with Gaussian random variables
-  gaussianRandomMatrix<F>(m,B);
+  F *temp = (F*) malloc(m*m*sizeof(F));
+  randn<F>(m*m,temp);
 
   // Construct positive definite matrix
-  herk<F>('L','N',m,m,1,B,m,0,A,m);
+  herk<F>(uplo,'N',m,m,1,temp,m,0,A,m);
 
   // Perform Cholesky factorization
   int info;
-  potrf<F>('L', m, A, m, info);
+  potrf<F>(uplo, m, A, m, info);
 
   // Clean up
-  free(B);
+  free(temp);
 
 }
 
 /// Output matrix entries to stream
 template <typename F>
-void printMatrix(ostream & os, const char uplo, const char diag,
+void printMatrix(ostream & os,
+		 const char uplo, const char diag,
 		 const int m, const int n, 
 		 const F * A, const int lda) {
 
   os << "    [[";
   for(int i=0;i<m;++i) {
-    if(tolower(uplo) == 'l') {
+    if(toupper(uplo) == 'L') {
       for(int j=0;j<i;++j)
 	os << A[IDX(i,j,lda)] << " ";
-      if(tolower(diag)=='u')
+      if(toupper(diag)=='U')
 	os << "1 ";
       else
 	os << A[IDX(i,i,lda)] << " ";
       for(int j=i+1;j<n;++j)
 	os << "0 ";
     }
-    else if(tolower(uplo) == 'u') {
+    else if(toupper(uplo) == 'U') {
       for(int j=0;j<i;++j)
 	os << "0 ";
-      if(tolower(diag)=='u')
+      if(toupper(diag)=='U')
 	os << "1 ";
       else
 	os << A[IDX(i,i,lda)] << " ";
@@ -294,44 +294,46 @@ int main(int argc, char **argv) {
   // -------------------------------------------------
 
   // Default parameters
-  int  m           = 4;
-  int  n           = 1;
-  bool sideLeft    = true;
-  bool lower       = true;
-  bool noTranspose = true;
-  bool nonUnitDiag = true;
-  bool verbose     = false;
+  int  m       = 4;
+  int  n       = 1;
+  char side    = 'L';
+  char uplo    = 'L';
+  char trans   = 'N';
+  char diag    = 'N';
+  bool verbose = false;
 
   // User-provided parameters
-  if(argc > 1) {
+  if(argc > 1)
     m = atoi(argv[1]);
+  if(argc > 2)
     n = atoi(argv[2]);
-  }
-  if(argc > 3) {
-    sideLeft    = (bool) atoi(argv[3]);
-    lower       = (bool) atoi(argv[4]);
-    noTranspose = (bool) atoi(argv[5]);
-    nonUnitDiag = (bool) atoi(argv[6]);
-  }
+  if(argc > 3)
+    side = toupper(argv[3][0]);
+  if(argc > 4)
+    uplo = toupper(argv[4][0]);
+  if(argc > 5)
+    trans = toupper(argv[5][0]);
+  if(argc > 6)
+    diag = toupper(argv[6][0]);
   if(argc > 7)
-    verbose = (bool) atoi(argv[7]);
+    verbose = atoi(argv[7]);
 
   // Initialization
   timeval timeStart, timeEnd;
 
   // Report parameters
-  printf("========================================\n");
-  printf("  SHIFTED TRIANGULAR SOLVE VALIDATION\n");
-  printf("========================================\n");
-  printf("m = %d\n", m);
-  printf("n = %d\n", n);
-  printf("\n");
-  printf("BLAS Options\n");
-  printf("----------------------------------------\n");  
-  printf("sideLeft    = %d\n", sideLeft);
-  printf("lower       = %d\n", lower);
-  printf("noTranspose = %d\n", noTranspose);
-  printf("nonUnitDiag = %d\n", nonUnitDiag);
+  std::cout << "========================================" << std::endl
+	    << "  SHIFTED TRIANGULAR SOLVE VALIDATION" << std::endl
+	    << "========================================" << std::endl
+	    << "m = " << m << std::endl
+	    << "n = " << n << std::endl
+	    << std::endl
+	    << "BLAS Options" << std::endl
+	    << "----------------------------------------" << std::endl
+	    << "side  = " << side << std::endl
+	    << "uplo  = " << uplo << std::endl
+	    << "trans = " << trans << std::endl
+	    << "diag  = " << diag << std::endl;
 
   // Initialize memory on host
   datafloat *A = (datafloat*) malloc(m*m*sizeof(datafloat));
@@ -342,14 +344,9 @@ int main(int argc, char **argv) {
 
   // Initialize matrices on host
   datafloat alpha = randn<datafloat>();
-  choleskyRandomMatrix<datafloat>(m,A);
-#pragma omp parallel for
-  for(int i=0;i<m*n;++i)
-    B[i] = randn<datafloat>();
-#pragma omp parallel for
-  for(int i=0;i<n;++i) {
-    shifts[i] = randn<datafloat>();
-  }
+  choleskyRandomMatrix<datafloat>(uplo,m,A);
+  randn<datafloat>(m*n,B);
+  randn<datafloat>(n,shifts);
 
   // Initialize memory on device
   datafloat *cuda_A, *cuda_B, *cuda_B_cublas, *cuda_shifts;
@@ -363,26 +360,23 @@ int main(int argc, char **argv) {
   cudaMemcpy(cuda_shifts, shifts, n*sizeof(datafloat), cudaMemcpyHostToDevice);
 
   // Initialize cuBLAS
+  cublasStatus_t status;
   cublasHandle_t handle;
   cublasCreate(&handle);
-
-  // Initialize BLAS options
-  cublasSideMode_t  side  = CUBLAS_SIDE_LEFT;
-  cublasFillMode_t  uplo  = CUBLAS_FILL_MODE_LOWER;
-  cublasOperation_t trans = CUBLAS_OP_N;
-  cublasDiagType_t  diag  = CUBLAS_DIAG_NON_UNIT;
-  if(!sideLeft) {
-    side = CUBLAS_SIDE_RIGHT;
-  }
-  if(!lower) {
-    uplo = CUBLAS_FILL_MODE_UPPER;
-  }
-  if(!noTranspose) {
-    trans = CUBLAS_OP_T;
-  }
-  if(!nonUnitDiag) {
-    diag = CUBLAS_DIAG_UNIT;
-  }
+  cublasSideMode_t  cublasSide  = CUBLAS_SIDE_LEFT;
+  cublasFillMode_t  cublasUplo  = CUBLAS_FILL_MODE_LOWER;
+  cublasOperation_t cublasTrans = CUBLAS_OP_N;
+  cublasDiagType_t  cublasDiag  = CUBLAS_DIAG_NON_UNIT;
+  if(side=='R')
+    cublasSide = CUBLAS_SIDE_RIGHT;
+  if(uplo=='U')
+    cublasUplo = CUBLAS_FILL_MODE_UPPER;
+  if(trans=='T')
+    cublasTrans = CUBLAS_OP_T;
+  else if(trans=='C') 
+    cublasTrans = CUBLAS_OP_C;
+  if(diag=='U')
+    cublasDiag = CUBLAS_DIAG_UNIT;
 
   // -------------------------------------------------
   // Test cudaMultiShiftTrsm
@@ -391,14 +385,16 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cudaMstrsm::cudaMultiShiftTrsm<datafloat>(handle, side, uplo, trans, diag,
-					    m, n, &alpha, cuda_A, m,
-					    cuda_B, m, cuda_shifts);
+  status = cudaMstrsm::cudaMultiShiftTrsm<datafloat>
+    (handle, cublasSide, cublasUplo, cublasTrans, cublasDiag,
+     m, n, &alpha, cuda_A, m, cuda_B, m, cuda_shifts);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cudaMstrsmTime
     = timeEnd.tv_sec - timeStart.tv_sec
     + (timeEnd.tv_usec - timeStart.tv_usec)/1e6;
+  if(status != CUBLAS_STATUS_SUCCESS)
+    std::cout << "cudaMstrsm FAILED" << std::endl;
 
   // Transfer result to host
   cudaMemcpy(X, cuda_B, m*n*sizeof(datafloat), 
@@ -412,13 +408,15 @@ int main(int argc, char **argv) {
   // Solve triangular system
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
-  cublasTrsm(handle,side,uplo,trans,diag,m,n,
-	     &alpha,cuda_A,m,cuda_B_cublas,m);
+  status = cublasTrsm(handle,cublasSide,cublasUplo,cublasTrans,cublasDiag,
+		      m,n,&alpha,cuda_A,m,cuda_B_cublas,m);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
   double cublasTime
     = timeEnd.tv_sec - timeStart.tv_sec
     + (timeEnd.tv_usec - timeStart.tv_usec)/1e6;
+  if(status != CUBLAS_STATUS_SUCCESS)
+    std::cout << "cublasTrsm FAILED" << std::endl;
 
   // -------------------------------------------------
   // Output results
@@ -448,7 +446,7 @@ int main(int argc, char **argv) {
     std::cout << "  shifts =" << std::endl;
     printMatrix<datafloat>(std::cout,'N','N',1,n,shifts,1);
     std::cout << "  A =" << std::endl;
-    printMatrix<datafloat>(std::cout,'L','N',m,m,A,m);
+    printMatrix<datafloat>(std::cout,uplo,diag,m,m,A,m);
     std::cout << "  B =" << std::endl;
     printMatrix<datafloat>(std::cout,'N','N',m,n,B,m);
     std::cout << "  X =" << std::endl;
@@ -458,7 +456,7 @@ int main(int argc, char **argv) {
   // Check error in solution
   double normB = nrm2<datafloat>(m*n,B,1);
   memcpy(residual,X,m*n*sizeof(datafloat));
-  trmm<datafloat>('L','L','N','N',m,n,1,A,m,residual,m);
+  trmm<datafloat>(side,uplo,trans,diag,m,n,1,A,m,residual,m);
 #pragma omp parallel for
   for(int i=0;i<n;++i)
     axpy<datafloat>(m, shifts[i], X+i*m, 1, residual+i*m, 1);

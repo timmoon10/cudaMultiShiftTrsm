@@ -52,82 +52,82 @@ cublasStatus_t cublasScal(cublasHandle_t handle, int n,
 
 // GEMM
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const float *alpha,
-			   const float *A, int lda,
-			   const float *B, int ldb,
-			   const float *beta,
-			   float *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const float *alpha,
+			  const float *A, int lda,
+			  const float *B, int ldb,
+			  const float *beta,
+			  float *C, int ldc) {
   return cublasSgemm(handle,transa,transb,m,n,k,
 		     alpha,A,lda,B,ldb,beta,C,ldc);
 }
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const double *alpha,
-			   const double *A, int lda,
-			   const double *B, int ldb,
-			   const double *beta,
-			   double *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const double *alpha,
+			  const double *A, int lda,
+			  const double *B, int ldb,
+			  const double *beta,
+			  double *C, int ldc) {
   return cublasDgemm(handle,transa,transb,m,n,k,
 		     alpha,A,lda,B,ldb,beta,C,ldc);
 }
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const cuFloatComplex *alpha,
-			   const cuFloatComplex *A, int lda,
-			   const cuFloatComplex *B, int ldb,
-			   const cuFloatComplex *beta,
-			   cuFloatComplex *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const cuFloatComplex *alpha,
+			  const cuFloatComplex *A, int lda,
+			  const cuFloatComplex *B, int ldb,
+			  const cuFloatComplex *beta,
+			  cuFloatComplex *C, int ldc) {
   return cublasCgemm(handle,transa,transb,m,n,k,
 		     alpha,A,lda,B,ldb,beta,C,ldc);
 }
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const cuDoubleComplex *alpha,
-			   const cuDoubleComplex *A, int lda,
-			   const cuDoubleComplex *B, int ldb,
-			   const cuDoubleComplex *beta,
-			   cuDoubleComplex *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const cuDoubleComplex *alpha,
+			  const cuDoubleComplex *A, int lda,
+			  const cuDoubleComplex *B, int ldb,
+			  const cuDoubleComplex *beta,
+			  cuDoubleComplex *C, int ldc) {
   return cublasZgemm(handle,transa,transb,m,n,k,
 		     alpha,A,lda,B,ldb,beta,C,ldc);
 }
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const std::complex<float> *alpha,
-			   const std::complex<float> *A, int lda,
-			   const std::complex<float> *B, int ldb,
-			   const std::complex<float> *beta,
-			   std::complex<float> *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const std::complex<float> *alpha,
+			  const std::complex<float> *A, int lda,
+			  const std::complex<float> *B, int ldb,
+			  const std::complex<float> *beta,
+			  std::complex<float> *C, int ldc) {
   return cublasCgemm(handle,transa,transb,m,n,k,
 		     (cuFloatComplex*)alpha,(cuFloatComplex*)A,lda,
 		     (cuFloatComplex*)B,ldb,
 		     (cuFloatComplex*)beta,(cuFloatComplex*)C,ldc);
 }
 inline
-cublasStatus_t cublasGgemm(cublasHandle_t handle,
-			   cublasOperation_t transa,
-			   cublasOperation_t transb,
-			   int m, int n, int k,
-			   const std::complex<double> *alpha,
-			   const std::complex<double> *A, int lda,
-			   const std::complex<double> *B, int ldb,
-			   const std::complex<double> *beta,
-			   std::complex<double> *C, int ldc) {
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const std::complex<double> *alpha,
+			  const std::complex<double> *A, int lda,
+			  const std::complex<double> *B, int ldb,
+			  const std::complex<double> *beta,
+			  std::complex<double> *C, int ldc) {
   return cublasZgemm(handle,transa,transb,m,n,k,
 		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
 		     (cuDoubleComplex*)B,ldb,

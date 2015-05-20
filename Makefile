@@ -1,11 +1,11 @@
 CC = nvcc
 EXE = validation
-CFLAGS   = -Xcompiler -fopenmp -Xcompiler -Wall
+CFLAGS   = -Xcompiler -fopenmp -Xcompiler -Wall -g
 INCFLAGS = -Iinclude
 LIBFLAGS = -lm -lblas -lcublas -llapack
 
 SOURCES     = $(wildcard src/*.cu)
-INCLUDES    = $(wildcard include/%.hpp)
+INCLUDES    = $(wildcard include/*.hpp)
 OBJECTS     = $(patsubst src/%.cu,obj/%.o,$(SOURCES))
 EXESOURCES  = $(wildcard *.cu)
 EXECUTABLES = $(patsubst %.cu,%,$(EXESOURCES))
