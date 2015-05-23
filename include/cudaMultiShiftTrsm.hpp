@@ -192,7 +192,7 @@ namespace cudaMstrsm {
     // Return zero if right hand side is zero
     if(alpha == 0) {
       for(int i=0; i<n; ++i) {
-	cudaError_t cudaStatus = cudaMemset(B+i*ldb,0,m*sizeof(F));
+	cudaError_t cudaStatus = cudaMemset(B+idx(0,i,ldb),0,m*sizeof(F));
 	if(cudaStatus != cudaSuccess) {
 	  cudaDeviceSynchronize();
 	  return CUBLAS_STATUS_INTERNAL_ERROR;
@@ -204,7 +204,7 @@ namespace cudaMstrsm {
 
     // Scale right hand side
     for(int i=0; i<n; ++i) {
-      status = cublasScal(handle, m, alpha, B+i*ldb, 1);
+      status = cublasScal(handle, m, alpha, B+idx(0,i,ldb), 1);
       if(status != CUBLAS_STATUS_SUCCESS)
 	return status;
     }

@@ -190,21 +190,21 @@ void potrf<complex<double> >(char uplo, int n,
  */
 template <typename F>
 F randn() {
-  F u1 = ((F)rand())/RAND_MAX;
-  F u2 = ((F)rand())/RAND_MAX;
+  F u1 = ((F)rand()+1)/(RAND_MAX+2);
+  F u2 = ((F)rand()+1)/(RAND_MAX+2);
   return sqrt(-2*log(u1))*cos(2*M_PI*u2);
 }
 template <>
 complex<float> randn<complex<float> >() {
-  float u1 = ((float)rand())/RAND_MAX;
-  float u2 = ((float)rand())/RAND_MAX;
+  float u1 = ((float)rand()+1)/(RAND_MAX+2);
+  float u2 = ((float)rand()+1)/(RAND_MAX+2);
   return complex<float>(sqrt(-2*log(u1))*cos(2*M_PI*u2),
 			sqrt(-2*log(u1))*sin(2*M_PI*u2));
 }
 template <>
 complex<double> randn<complex<double> >() {
-  double u1 = ((double)rand())/RAND_MAX;
-  double u2 = ((double)rand())/RAND_MAX;
+  double u1 = ((double)rand()+1)/(RAND_MAX+2);
+  double u2 = ((double)rand()+1)/(RAND_MAX+2);
   return complex<double>(sqrt(-2*log(u1))*cos(2*M_PI*u2),
 			 sqrt(-2*log(u1))*sin(2*M_PI*u2));
 }
@@ -231,6 +231,10 @@ void choleskyRandomMatrix(char uplo, int m, F *A) {
 
   // Construct positive definite matrix
   herk<F>(uplo,'N',m,m,1,temp,m,0,A,m);
+
+  // Shift diagonal to improve condition number
+  for(int i=0;i<m;++i)
+    A[IDX(i,i,m)] += sqrt(m);
 
   // Perform Cholesky factorization
   int info;

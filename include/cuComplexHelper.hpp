@@ -7,6 +7,34 @@
 // Overloading operators
 // ===============================================
 
+// Conjugation
+__host__ __device__ inline
+cuFloatComplex conj(const cuFloatComplex & a) {
+  return cuConjf(a);
+}
+__host__ __device__ inline
+cuDoubleComplex conj(const cuDoubleComplex & a) {
+  return cuConj(a);
+}
+__host__ __device__ inline
+float conj(const float a) {
+  return a;
+}
+__host__ __device__ inline
+double conj(const double a) {
+  return a;
+}
+
+// Negation
+__host__ __device__ inline
+cuFloatComplex operator-(const cuFloatComplex & a) {
+  return make_cuFloatComplex(-cuCrealf(a),-cuCimagf(a));
+}
+__host__ __device__ inline
+cuDoubleComplex operator-(const cuDoubleComplex & a) {
+  return make_cuDoubleComplex(-cuCreal(a),-cuCimag(a));
+}
+
 // Addition
 __host__ __device__ inline
 cuFloatComplex operator+(const cuFloatComplex & a,
@@ -27,15 +55,15 @@ cuFloatComplex operator+(const int a, const cuFloatComplex & b) {
 }
 __host__ __device__ inline
 cuFloatComplex operator+(const cuFloatComplex & a,const float b) {
-  return make_cuFloatComplex(cuCrealf(a)+b, cuCimagf(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuFloatComplex operator+(const cuFloatComplex & a,const double b) {
-  return make_cuFloatComplex(float(cuCrealf(a)+b), cuCimagf(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuFloatComplex operator+(const cuFloatComplex & a,const int b) {
-  return make_cuFloatComplex(cuCrealf(a)+b, cuCimagf(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator+(const cuDoubleComplex & a,
@@ -56,15 +84,15 @@ cuDoubleComplex operator+(const int a, const cuDoubleComplex & b) {
 }
 __host__ __device__ inline
 cuDoubleComplex operator+(const cuDoubleComplex & a, const float b) {
-  return make_cuDoubleComplex(cuCreal(a)+b, cuCimag(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator+(const cuDoubleComplex & a, const double b) {
-  return make_cuDoubleComplex(cuCreal(a)+b, cuCimag(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator+(const cuDoubleComplex & a, const int b) {
-  return make_cuDoubleComplex(cuCreal(a)+b, cuCimag(a));
+  return b+a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator+(const cuDoubleComplex & a,
@@ -171,15 +199,15 @@ cuFloatComplex operator*(const int a, const cuFloatComplex & b) {
 }
 __host__ __device__ inline
 cuFloatComplex operator*(const cuFloatComplex & a, const float & b) {
-  return make_cuFloatComplex(cuCrealf(a)*b, cuCimagf(a)*b);
+  return b*a;
 }
 __host__ __device__ inline
 cuFloatComplex operator*(const cuFloatComplex & a, const double & b) {
-  return make_cuFloatComplex(float(cuCrealf(a)*b), float(cuCimagf(a)*b));
+  return b*a;
 }
 __host__ __device__ inline
 cuFloatComplex operator*(const cuFloatComplex & a, const int & b) {
-  return make_cuFloatComplex(cuCrealf(a)*b, cuCimagf(a)*b);
+  return b*a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator*(const cuDoubleComplex & a,
@@ -200,15 +228,15 @@ cuDoubleComplex operator*(const int a, const cuDoubleComplex & b) {
 }
 __host__ __device__ inline
 cuDoubleComplex operator*(const cuDoubleComplex & a, const float b) {
-  return make_cuDoubleComplex(cuCreal(a)*b, cuCimag(a)*b);
+  return b*a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator*(const cuDoubleComplex & a, const double b) {
-  return make_cuDoubleComplex(cuCreal(a)*b, cuCimag(a)*b);
+  return b*a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator*(const cuDoubleComplex & a, const int b) {
-  return make_cuDoubleComplex(cuCreal(a)*b, cuCimag(a)*b);
+  return b*a;
 }
 __host__ __device__ inline
 cuDoubleComplex operator*(const cuDoubleComplex & a,
