@@ -25,6 +25,8 @@ namespace cudaMstrsm {
   // -------------------------------------------
 
   /// Solve triangular systems with multiple shifts (LLN case)
+  /** Assumes blockDim.x = m
+   */
   template <typename F>
   __global__ void LLN_block(const bool unitDiag,
 			    const int m,
@@ -38,47 +40,55 @@ namespace cudaMstrsm {
     // Initialize indices
     int tid = threadIdx.x;
 
-    // Copy global memory to shared memory
+    // Shared memory
     __shared__ F shared_B[BSIZE];
     __shared__ F shared_shift;
-    if(tid < m)
-      shared_B[tid] = B[idx(tid,blockIdx.x,ldb)];
-    if(tid == 0) {
-      if(shifts == 0)
-	shared_shift = 0;
-      else
-	shared_shift = shifts[blockIdx.x];
+
+    // Perform forward substitution for each RHS
+    for(int bid = blockIdx.x; bid<n; bid+=gridDim.x) {
+      
+      // Copy global memory to shared memory
+      shared_B[tid] = B[idx(tid,bid,ldb)];
+      if(tid == 0) {
+	if(shifts == 0)
+	  shared_shift = 0;
+	else
+	  shared_shift = shifts[bid];
+      }
+
+      // Perform forward substitution
+      for(int i=0; i<m; ++i) {
+
+	// Copy global memory to private memory
+	F private_A;
+	__syncthreads();
+	if(tid>=i)
+	  private_A = A[idx(tid,i,lda)];
+	if(unitDiag && tid==i)
+	  private_A = 1;
+
+	// Obtain ith row of solution
+	if(tid==i)
+	  shared_B[i] /= private_A + shared_shift;
+
+	// Update remaining rows of RHS matrix
+	__syncthreads();
+	if(tid>i)
+	  shared_B[tid] -= private_A*shared_B[i];
+	__syncthreads();
+
+      }
+
+      // Copy shared memory to global memory
+      B[idx(tid,bid,ldb)] = shared_B[tid];
+
     }
 
-    // Perform forward substitution
-    for(int i=0; i<m; ++i) {
-
-      // Copy global memory to private memory
-      F private_A;
-      __syncthreads();
-      if(i<=tid && tid<m)
-	private_A = A[idx(tid,i,lda)];
-      if(unitDiag && tid==i)
-	private_A = 1;
-
-      // Obtain ith row of solution
-      if(tid==i)
-	shared_B[i] /= private_A + shared_shift;
-
-      // Update remaining rows of RHS matrix
-      __syncthreads();
-      if(tid>i)
-	shared_B[tid] -= private_A*shared_B[i];
-
-    }
-
-    // Copy shared memory to global memory
-    __syncthreads();
-    if(tid < m)
-      B[idx(tid,blockIdx.x,ldb)] = shared_B[tid];
   }
 
   /// Solve triangular systems with multiple shifts (LUN case)
+  /** Assumes blockDim.x = m
+   */
   template <typename F>
   __global__ void LUN_block(const bool unitDiag,
 			    const int m,
@@ -92,44 +102,51 @@ namespace cudaMstrsm {
     // Initialize indices
     int tid = threadIdx.x;
 
-    // Copy global memory to shared memory
+    // Shared memory
     __shared__ F shared_B[BSIZE];
     __shared__ F shared_shift;
-    if(tid < m)
-      shared_B[tid] = B[idx(tid,blockIdx.x,ldb)];
-    if(tid == 0) {
-      if(shifts == 0)
-	shared_shift = 0;
-      else
-	shared_shift = shifts[blockIdx.x];
-    }
 
-    // Perform backward substitution
-    for(int i=m-1; i>=0; --i) {
+    // Perform backward substitution for each RHS
+    for(int bid = blockIdx.x; bid<n; bid+=gridDim.x) {
 
-      // Copy global memory to private memory
-      F private_A;
-      __syncthreads();
-      if(tid<=i)
-	private_A = A[idx(tid,i,lda)];
-      if(unitDiag && tid==i)
-	private_A = 1;
+      // Copy global memory to shared memory
+      shared_B[tid] = B[idx(tid,bid,ldb)];
+      if(tid == 0) {
+	if(shifts == 0)
+	  shared_shift = 0;
+	else
+	  shared_shift = shifts[bid];
+      }
 
-      // Obtain ith row of solution
-      if(tid==i)
-	shared_B[tid] /= private_A+shared_shift;
+      // Perform backward substitution
+      for(int i=m-1; i>=0; --i) {
 
-      // Update remaining rows of RHS matrix
-      __syncthreads();
-      if(tid<i)
-	shared_B[tid] -= private_A*shared_B[i];
+	// Copy global memory to private memory
+	F private_A;
+	__syncthreads();
+	if(tid<=i)
+	  private_A = A[idx(tid,i,lda)];
+	if(unitDiag && tid==i)
+	  private_A = 1;
+
+	// Obtain ith row of solution
+	if(tid==i)
+	  shared_B[tid] /= private_A+shared_shift;
+
+	// Update remaining rows of RHS matrix
+	__syncthreads();
+	if(tid<i)
+	  shared_B[tid] -= private_A*shared_B[i];
+	__syncthreads();
       
+      }
+
+      // Copy shared memory to global memory
+      if(tid < m)
+	B[idx(tid,bid,ldb)] = shared_B[tid];
+
     }
 
-    // Copy shared memory to global memory
-    __syncthreads();
-    if(tid < m)
-      B[idx(tid,blockIdx.x,ldb)] = shared_B[tid];
   }
 
   // -------------------------------------------
@@ -151,10 +168,19 @@ namespace cudaMstrsm {
 
     // Initialize CUDA and cuBLAS objects
     cublasStatus_t status;
+    cudaError_t cudaStatus;    
     cudaStream_t stream;
+    int device;
+    cudaDeviceProp prop;
     status = cublasGetStream(handle, &stream);
     if(status != CUBLAS_STATUS_SUCCESS)
       return status;
+    cudaStatus = cudaGetDevice(&device);
+    if(cudaStatus != cudaSuccess)
+      return CUBLAS_STATUS_EXECUTION_FAILED;
+    cudaStatus = cudaGetDeviceProperties(&prop, device);
+    if(cudaStatus != cudaSuccess)
+      return CUBLAS_STATUS_EXECUTION_FAILED;
 
     // Report invalid parameters
     if(m < 0) {
@@ -192,7 +218,7 @@ namespace cudaMstrsm {
     // Return zero if right hand side is zero
     if(alpha == 0) {
       for(int i=0; i<n; ++i) {
-	cudaError_t cudaStatus = cudaMemset(B+idx(0,i,ldb),0,m*sizeof(F));
+	cudaStatus = cudaMemset(B+idx(0,i,ldb),0,m*sizeof(F));
 	if(cudaStatus != cudaSuccess) {
 	  cudaDeviceSynchronize();
 	  return CUBLAS_STATUS_INTERNAL_ERROR;
@@ -214,7 +240,8 @@ namespace cudaMstrsm {
     F one    = 1;
     F negOne = -1;
     int numBlocks = (m+BSIZE-1)/BSIZE;  // Number of subblocks in A
-  
+    int gridDim = min(n,prop.maxGridSize[0]);
+
     // LLN case
     if(side==CUBLAS_SIDE_LEFT
        && uplo==CUBLAS_FILL_MODE_LOWER
@@ -222,7 +249,7 @@ namespace cudaMstrsm {
       
       int i = 0;  // Current row in A
       for(int b=0; b<numBlocks-1; ++b) {
-	LLN_block <<< n, BSIZE, 0, stream >>>
+	LLN_block <<< gridDim, BSIZE, 0, stream >>>
 	  (unitDiag, BSIZE,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
 	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
 			    m-(i+BSIZE),n,BSIZE,
@@ -232,7 +259,7 @@ namespace cudaMstrsm {
 	  return status;
 	i += BSIZE;
       }
-      LLN_block <<< n, BSIZE, 0, stream >>>
+      LLN_block <<< gridDim, m-i, 0, stream >>>
 	(unitDiag,m-i,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
     }
 
@@ -243,7 +270,7 @@ namespace cudaMstrsm {
 
       int i = m-BSIZE; // Current row in A
       for(int b=numBlocks-1; b>0; --b) {
-	LUN_block <<< n, BSIZE, 0, stream >>>
+	LUN_block <<< gridDim, BSIZE, 0, stream >>>
 	  (unitDiag,BSIZE,n,A+idx(i,i,lda),lda,B+i,ldb,shifts);
 	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
 			    i,n,BSIZE,&negOne,A+idx(0,i,lda),lda,
@@ -252,7 +279,7 @@ namespace cudaMstrsm {
 	  return status;
 	i -= BSIZE;
       }
-      LUN_block <<< n, BSIZE, 0, stream >>>
+      LUN_block <<< gridDim, i+BSIZE, 0, stream >>>
 	(unitDiag,i+BSIZE,n,A,lda,B,ldb,shifts);
 
     }
