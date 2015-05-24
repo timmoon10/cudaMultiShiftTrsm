@@ -8,7 +8,10 @@
 #include "cublasHelper.hpp"
 #include "cudaMultiShiftTrsm.hpp"
 
+#ifndef DATAFLOAT_DEFINED
 #define datafloat float
+#endif
+
 #define IDX(i,j,ld) ((i)+(j)*(ld))
 
 using namespace std;
