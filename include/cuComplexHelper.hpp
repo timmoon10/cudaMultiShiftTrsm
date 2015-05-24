@@ -9,19 +9,19 @@
 
 // Conjugation
 __host__ __device__ inline
-cuFloatComplex conj(const cuFloatComplex & a) {
+cuFloatComplex conjugate(const cuFloatComplex & a) {
   return cuConjf(a);
 }
 __host__ __device__ inline
-cuDoubleComplex conj(const cuDoubleComplex & a) {
+cuDoubleComplex conjugate(const cuDoubleComplex & a) {
   return cuConj(a);
 }
 __host__ __device__ inline
-float conj(const float a) {
+float conjugate(const float a) {
   return a;
 }
 __host__ __device__ inline
-double conj(const double a) {
+double conjugate(const double a) {
   return a;
 }
 

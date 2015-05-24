@@ -12,8 +12,9 @@ EXESOURCES  = $(wildcard *.cu)
 EXECUTABLES = $(patsubst %.cu,%,$(EXESOURCES))
 
 # Command line options
-#   DEBUG=1      Activate debugging flag
-#   O=#          Activate compiler optimization flag
+#   DEBUG=1  Activate debugging flag (-g,-pg)
+#   O=#      Activate compiler optimization flag (-O0,-O1,-O2,-O3)
+#   ARCH=#   Choose CUDA architecture (default is sm_13)
 
 # Debug option
 ifeq ($(DEBUG),1)
@@ -32,6 +33,13 @@ CFLAGS += -O2
 endif
 ifeq ($(O),0)
 CFLAGS += -O3
+endif
+
+# CUDA architecture option
+ifeq ($(ARCH),)
+CFLAGS += -arch=sm_13
+else
+CFLAGS += -arch=$(ARCH)
 endif
 
 # Create all executables

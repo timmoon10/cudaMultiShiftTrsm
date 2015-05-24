@@ -9,6 +9,7 @@ Argument        | Description
 ----------------|---------------------------------------------
 `DEBUG=1`       | Activate debugging flags (`-g` and `-pg`)
 `O=#`           | Activate compiler optimization flag (`-O0`, `-O1`, `-O2`, or `-O3`, depending on input)
+`ARCH=#`        | Choose CUDA architecture (default is `sm_13`)
 
 The validation program takes up to eight arguments:
 ```
