@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <iostream>
 #include <complex>
 #include <cuda.h>
 #include <cublas_v2.h>
@@ -14,9 +14,9 @@ namespace cudaMstrsm {
   // Misc
   // -------------------------------------------
 
-  // CUDA warp size
+  /// CUDA warp size
   const int BSIZE = 32;
-  // Matrix entry index with Fortran ordering
+  /// Matrix entry index with Fortran ordering
   __host__ __device__ inline
   int idx(int i,int j,int ld) {return i+j*ld;}
 
@@ -155,7 +155,7 @@ namespace cudaMstrsm {
 
   /// Solve triangular systems with multiple shifts
   template<typename F>
-  cublasStatus_t cudaMultiShiftTrsm(const cublasHandle_t handle,
+  cublasStatus_t cudaMultiShiftTrsm(cublasHandle_t handle,
 				    const cublasSideMode_t side,
 				    const cublasFillMode_t uplo,
 				    const cublasOperation_t trans,
@@ -184,47 +184,45 @@ namespace cudaMstrsm {
 
     // Report invalid parameters
     if(m < 0) {
-      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 6 is invalid (m<0)\n");
+      std::cerr << "Error (cudaMultiShiftTrsm): argument 6 is invalid (m<0)\n";
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(n < 0) {
-      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 7 is invalid (n<0)\n");
+      std::cerr << "Error (cudaMultiShiftTrsm): argument 7 is invalid (n<0)\n";
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(lda < max(1,m)){
-      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 10 is invalid (lda<max(1,m))\n");
+      std::cerr << "Error (cudaMultiShiftTrsm): argument 10 is invalid (lda<max(1,m))\n";
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(ldb < max(1,m)) {
-      fprintf(stderr,"Error (cudaMultiShiftTrsm): argument 12 is invalid (lda<max(1,m))\n");
+      std::cerr << "Error (cudaMultiShiftTrsm): argument 12 is invalid (lda<max(1,m))\n";
       return CUBLAS_STATUS_INVALID_VALUE;
     }
 
     // Error if an unimplemented feature is called
     // TODO: remove this section when possible
     if(side != CUBLAS_SIDE_LEFT) {
-      fprintf(stderr,
-	      "Error (cudaMultiShiftTrsm): invalid input in argument 2\n"
-	      "  side=CUBLAS_SIDE_RIGHT is not yet implemented\n");
+      std::cerr <<
+	"Error (cudaMultiShiftTrsm): invalid input in argument 2\n"
+	"  side=CUBLAS_SIDE_RIGHT is not yet implemented\n";
       return CUBLAS_STATUS_NOT_SUPPORTED;
     }
     if(trans != CUBLAS_OP_N) {
-      fprintf(stderr,
-	      "Error (cudaMultiShiftTrsm): invalid input in argument 4\n"
-	      "  trans=CUBLAS_OP_T and trans=CUBLAS_OP_C are not yet implemented\n");
+      std::cerr << 
+	"Error (cudaMultiShiftTrsm): invalid input in argument 4\n"
+	"  trans=CUBLAS_OP_T and trans=CUBLAS_OP_C are not yet implemented\n";
       return CUBLAS_STATUS_NOT_SUPPORTED;
     }
 
     // Return zero if right hand side is zero
     if(alpha == 0) {
       for(int i=0; i<n; ++i) {
-	cudaStatus = cudaMemset(B+idx(0,i,ldb),0,m*sizeof(F));
+	cudaStatus = cudaMemsetAsync(B+idx(0,i,ldb),0,m*sizeof(F),stream);
 	if(cudaStatus != cudaSuccess) {
-	  cudaDeviceSynchronize();
 	  return CUBLAS_STATUS_INTERNAL_ERROR;
 	}
       }
-      cudaDeviceSynchronize();
       return CUBLAS_STATUS_SUCCESS;
     }
 
@@ -265,8 +263,8 @@ namespace cudaMstrsm {
 
     // LUN case
     else if(side==CUBLAS_SIDE_LEFT
-       && uplo==CUBLAS_FILL_MODE_UPPER
-       && trans==CUBLAS_OP_N) {
+	    && uplo==CUBLAS_FILL_MODE_UPPER
+	    && trans==CUBLAS_OP_N) {
 
       int i = m-BSIZE; // Current row in A
       for(int b=numBlocks-1; b>0; --b) {
@@ -292,12 +290,12 @@ namespace cudaMstrsm {
   template <> inline
   cublasStatus_t 
   cudaMultiShiftTrsm<std::complex<float> >
-  (const cublasHandle_t handle,
-   const cublasSideMode_t side, const cublasFillMode_t uplo,
-   const cublasOperation_t trans, const cublasDiagType_t diag,
-   const int m, const int n, const std::complex<float> * __restrict__ alpha,
-   const std::complex<float> * __restrict__ A, const int lda,
-   std::complex<float> * __restrict__ B, const int ldb,
+  (cublasHandle_t handle,
+   cublasSideMode_t side, cublasFillMode_t uplo,
+   cublasOperation_t trans, cublasDiagType_t diag,
+   int m, int n, const std::complex<float> * __restrict__ alpha,
+   const std::complex<float> * __restrict__ A, int lda,
+   std::complex<float> * __restrict__ B, int ldb,
    const std::complex<float> * __restrict__ shifts) {
     return cudaMultiShiftTrsm<cuFloatComplexFull>
       (handle,side,uplo,trans,diag,m,n,(cuFloatComplexFull*)alpha,
@@ -307,12 +305,12 @@ namespace cudaMstrsm {
   template <> inline
   cublasStatus_t 
   cudaMultiShiftTrsm<cuFloatComplex>
-  (const cublasHandle_t handle,
-   const cublasSideMode_t side, const cublasFillMode_t uplo,
-   const cublasOperation_t trans, const cublasDiagType_t diag,
-   const int m, const int n, const cuFloatComplex * __restrict__ alpha,
-   const cuFloatComplex * __restrict__ A, const int lda,
-   cuFloatComplex * __restrict__ B, const int ldb,
+  (cublasHandle_t handle,
+   cublasSideMode_t side, cublasFillMode_t uplo,
+   cublasOperation_t trans, cublasDiagType_t diag,
+   int m, int n, const cuFloatComplex * __restrict__ alpha,
+   const cuFloatComplex * __restrict__ A, int lda,
+   cuFloatComplex * __restrict__ B, int ldb,
    const cuFloatComplex * __restrict__ shifts) {
     return cudaMultiShiftTrsm<cuFloatComplexFull>
       (handle,side,uplo,trans,diag,m,n,(cuFloatComplexFull*)alpha,
@@ -322,12 +320,12 @@ namespace cudaMstrsm {
   template <> inline
   cublasStatus_t 
   cudaMultiShiftTrsm<std::complex<double> >
-  (const cublasHandle_t handle,
-   const cublasSideMode_t side, const cublasFillMode_t uplo,
-   const cublasOperation_t trans, const cublasDiagType_t diag,
-   const int m, const int n, const std::complex<double> * __restrict__ alpha,
-   const std::complex<double> * __restrict__ A, const int lda,
-   std::complex<double> * __restrict__ B, const int ldb,
+  (cublasHandle_t handle,
+   cublasSideMode_t side, cublasFillMode_t uplo,
+   cublasOperation_t trans, cublasDiagType_t diag,
+   int m, int n, const std::complex<double> * __restrict__ alpha,
+   const std::complex<double> * __restrict__ A, int lda,
+   std::complex<double> * __restrict__ B, int ldb,
    const std::complex<double> * __restrict__ shifts) {
     return cudaMultiShiftTrsm<cuDoubleComplexFull>
       (handle,side,uplo,trans,diag,m,n,(cuDoubleComplexFull*)alpha,
@@ -337,12 +335,12 @@ namespace cudaMstrsm {
   template <> inline
   cublasStatus_t 
   cudaMultiShiftTrsm<cuDoubleComplex>
-  (const cublasHandle_t handle,
-   const cublasSideMode_t side, const cublasFillMode_t uplo,
-   const cublasOperation_t trans, const cublasDiagType_t diag,
-   const int m, const int n, const cuDoubleComplex * __restrict__ alpha,
-   const cuDoubleComplex * __restrict__ A, const int lda,
-   cuDoubleComplex * __restrict__ B, const int ldb,
+  (cublasHandle_t handle,
+   cublasSideMode_t side, cublasFillMode_t uplo,
+   cublasOperation_t trans, cublasDiagType_t diag,
+   int m, int n, const cuDoubleComplex * __restrict__ alpha,
+   const cuDoubleComplex * __restrict__ A, int lda,
+   cuDoubleComplex * __restrict__ B, int ldb,
    const cuDoubleComplex * __restrict__ shifts) {
     return cudaMultiShiftTrsm<cuDoubleComplexFull>
       (handle,side,uplo,trans,diag,m,n,(cuDoubleComplexFull*)alpha,

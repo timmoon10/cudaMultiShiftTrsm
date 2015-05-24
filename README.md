@@ -7,21 +7,21 @@ line. The following arguments can be applied:
 
 Argument        | Description
 ----------------|---------------------------------------------
-`DATAFLOAT="#"` | Choose data type (`float`,`double`,`complex<float>`,`complex<double>`). `float` is default.
-`DEBUG=1`       | Activate debugging flags (`-g`, `-pg`)
-`O=1`           | Activate compiler optimization flag (`-O2`)
+`DEBUG=1`       | Activate debugging flags (`-g` and `-pg`)
+`O=#`           | Activate compiler optimization flag (`-O0`, `-O1`, `-O2`, or `-O3`, depending on input)
 
-The validation program takes up to seven arguments:
+The validation program takes up to eight arguments:
 ```
-./validation m n side uplo trans diag verbose
+./validation m n dataType side uplo trans diag verbose
 ```
 
 Argument   | Default | Description
 -----------|---------|---------------------------------------------
 `m`        | `4`     | Matrix dimension
 `n`        | `1`     | Number of right hand sides
-`side`     | `L`     | Side to apply matrix
-`uplo`     | `L`     | Whether matrix is upper or lower triangular
-`trans`    | `N`     | Whether to apply matrix transpose
-`diag`     | `N`     | Whether matrix is unit triangular
+`dataType` | `S`     | Data type (`S`, `D`, `C`, or `Z`)
+`side`     | `L`     | Side to apply matrix (`L` or `R`)
+`uplo`     | `L`     | Type of triangular matrix (`L` or `U`)
+`trans`    | `N`     | Whether to apply matrix transpose (`N`, `T`, or `C`)
+`diag`     | `N`     | Whether matrix is unit triangular (`N` or `U`)
 `verbose`  | `0`     | Whether to output matrix entries

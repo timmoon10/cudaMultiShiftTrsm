@@ -5,7 +5,6 @@ INCFLAGS = -Iinclude
 LIBFLAGS = -lm -lblas -lcublas -llapack
 
 # Files
-EXE = validation
 SOURCES     = $(wildcard src/*.cu)
 INCLUDES    = $(wildcard include/*.hpp)
 OBJECTS     = $(patsubst src/%.cu,obj/%.o,$(SOURCES))
@@ -14,22 +13,7 @@ EXECUTABLES = $(patsubst %.cu,%,$(EXESOURCES))
 
 # Command line options
 #   DEBUG=1      Activate debugging flag
-#   DATAFLOAT=#  Choose data type associated with datafloat
-#   O=1          Activate compiler optimization flag
-
-# Debug option
-ifeq ($(DATAFLOAT),float)
-CFLAGS += -DDATAFLOAT_DEFINED -Ddatafloat=float
-endif
-ifeq ($(DATAFLOAT),double)
-CFLAGS += -DDATAFLOAT_DEFINED -Ddatafloat=double
-endif
-ifeq ($(DATAFLOAT),complex<float>)
-CFLAGS += -DDATAFLOAT_DEFINED -Ddatafloat="complex<float>"
-endif
-ifeq ($(DATAFLOAT),complex<double>)
-CFLAGS += -DDATAFLOAT_DEFINED -Ddatafloat="complex<double>"
-endif
+#   O=#          Activate compiler optimization flag
 
 # Debug option
 ifeq ($(DEBUG),1)
@@ -37,8 +21,17 @@ CFLAGS += -g -pg
 endif
 
 # Optimization option
+ifeq ($(O),0)
+CFLAGS += -O0
+endif
 ifeq ($(O),1)
+CFLAGS += -O1
+endif
+ifeq ($(O),2)
 CFLAGS += -O2
+endif
+ifeq ($(O),0)
+CFLAGS += -O3
 endif
 
 # Create all executables

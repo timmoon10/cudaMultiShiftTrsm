@@ -1,5 +1,4 @@
 #include <complex>
-#include <cuda.h>
 #include <cublas_v2.h>
 
 #ifndef __CUBLASHELPER_HPP__
