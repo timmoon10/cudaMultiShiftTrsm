@@ -31,7 +31,7 @@ endif
 ifeq ($(O),2)
 CFLAGS += -O2
 endif
-ifeq ($(O),0)
+ifeq ($(O),3)
 CFLAGS += -O3
 endif
 
