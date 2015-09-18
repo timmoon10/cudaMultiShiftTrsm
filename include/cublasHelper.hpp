@@ -1,8 +1,53 @@
-#include <complex>
-#include <cublas_v2.h>
+#pragma once
 
-#ifndef __CUBLASHELPER_HPP__
-#define __CUBLASHELPER_HPP__
+#include <iostream>
+#include <complex>
+
+#include <cublas_v2.h>
+#include <thrust/complex.h>
+
+// ===============================================
+// Error checking
+// ===============================================
+
+static const char* cublasGetErrorString(cublasStatus_t status) {
+  switch(status) {
+  case CUBLAS_STATUS_SUCCESS:
+    return "CUBLAS_STATUS_SUCCESS";
+  case CUBLAS_STATUS_NOT_INITIALIZED:
+    return "CUBLAS_STATUS_NOT_INITIALIZED";
+  case CUBLAS_STATUS_ALLOC_FAILED:
+    return "CUBLAS_STATUS_ALLOC_FAILED";
+  case CUBLAS_STATUS_INVALID_VALUE:
+    return "CUBLAS_STATUS_INVALID_VALUE";
+  case CUBLAS_STATUS_ARCH_MISMATCH:
+    return "CUBLAS_STATUS_ARCH_MISMATCH";
+  case CUBLAS_STATUS_MAPPING_ERROR:
+    return "CUBLAS_STATUS_MAPPING_ERROR";
+  case CUBLAS_STATUS_EXECUTION_FAILED:
+    return "CUBLAS_STATUS_EXECUTION_FAILED";
+  case CUBLAS_STATUS_INTERNAL_ERROR:
+    return "CUBLAS_STATUS_INTERNAL_ERROR";
+  case CUBLAS_STATUS_NOT_SUPPORTED:
+    return "CUBLAS_STATUS_NOT_SUPPORTED";
+  case CUBLAS_STATUS_LICENSE_ERROR:
+    return "CUBLAS_STATUS_LICENSE_ERROR";
+  default:
+    return "unknown error";
+  }
+}
+
+#define CUBLAS_CHECK(status)					\
+  do {								\
+    cublasStatus_t e = (status);				\
+    if(e != CUBLAS_STATUS_SUCCESS) {				\
+      std::cerr << "cuBLAS error "				\
+		<< "(" << __FILE__ << ":" << __LINE__ << ")"	\
+		<< ": " << cublasGetErrorString(e)		\
+		<< std::endl;					\
+      exit(EXIT_FAILURE); /* TODO: find better way to fail */	\
+    }								\
+  } while(0)
 
 // ===============================================
 // Unified interface for cuBLAS calls
@@ -45,6 +90,20 @@ inline
 cublasStatus_t cublasScal(cublasHandle_t handle, int n,
 			  const std::complex<double> *alpha, 
 			  std::complex<double> *x, int incx) {
+  return cublasZscal(handle,n,(cuDoubleComplex*)alpha,
+		     (cuDoubleComplex*)x,incx);
+}
+inline
+cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			  const thrust::complex<float> *alpha, 
+			  thrust::complex<float> *x, int incx) {
+  return cublasCscal(handle,n,(cuFloatComplex*)alpha,
+		     (cuFloatComplex*)x,incx);
+}
+inline
+cublasStatus_t cublasScal(cublasHandle_t handle, int n,
+			  const thrust::complex<double> *alpha, 
+			  thrust::complex<double> *x, int incx) {
   return cublasZscal(handle,n,(cuDoubleComplex*)alpha,
 		     (cuDoubleComplex*)x,incx);
 }
@@ -132,6 +191,36 @@ cublasStatus_t cublasGemm(cublasHandle_t handle,
 		     (cuDoubleComplex*)B,ldb,
 		     (cuDoubleComplex*)beta,(cuDoubleComplex*)C,ldc);
 }
+inline
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const thrust::complex<float> *alpha,
+			  const thrust::complex<float> *A, int lda,
+			  const thrust::complex<float> *B, int ldb,
+			  const thrust::complex<float> *beta,
+			  thrust::complex<float> *C, int ldc) {
+  return cublasCgemm(handle,transa,transb,m,n,k,
+		     (cuFloatComplex*)alpha,(cuFloatComplex*)A,lda,
+		     (cuFloatComplex*)B,ldb,
+		     (cuFloatComplex*)beta,(cuFloatComplex*)C,ldc);
+}
+inline
+cublasStatus_t cublasGemm(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n, int k,
+			  const thrust::complex<double> *alpha,
+			  const thrust::complex<double> *A, int lda,
+			  const thrust::complex<double> *B, int ldb,
+			  const thrust::complex<double> *beta,
+			  thrust::complex<double> *C, int ldc) {
+  return cublasZgemm(handle,transa,transb,m,n,k,
+		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
+		     (cuDoubleComplex*)B,ldb,
+		     (cuDoubleComplex*)beta,(cuDoubleComplex*)C,ldc);
+}
 
 // TRSM
 inline
@@ -210,6 +299,31 @@ cublasStatus_t cublasTrsm(cublasHandle_t handle,
 		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
 		     (cuDoubleComplex*)B,ldb);
 }
-
-
-#endif
+inline
+cublasStatus_t cublasTrsm(cublasHandle_t handle,
+			  cublasSideMode_t side,
+			  cublasFillMode_t uplo,
+			  cublasOperation_t trans,
+			  cublasDiagType_t diag,
+			  int m, int n,
+			  const thrust::complex<float> *alpha,
+			  const thrust::complex<float> *A, int lda,
+			  thrust::complex<float> * B, int ldb) {
+  return cublasCtrsm(handle,side,uplo,trans,diag,m,n,
+		     (cuFloatComplex*)alpha,(cuFloatComplex*)A,lda,
+		     (cuFloatComplex*)B,ldb);
+}
+inline
+cublasStatus_t cublasTrsm(cublasHandle_t handle,
+			  cublasSideMode_t side,
+			  cublasFillMode_t uplo,
+			  cublasOperation_t trans,
+			  cublasDiagType_t diag,
+			  int m, int n,
+			  const thrust::complex<double> *alpha,
+			  const thrust::complex<double> *A, int lda,
+			  thrust::complex<double> * B, int ldb) {
+  return cublasZtrsm(handle,side,uplo,trans,diag,m,n,
+		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
+		     (cuDoubleComplex*)B,ldb);
+}

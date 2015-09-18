@@ -1,19 +1,23 @@
 # cudaMultiShiftTrsm
 Multi-Shift Triangular Solve in CUDA
 
-## Validation
-Compile the validation program by typing `make` into the command
-line. The following arguments can be applied:
+## Compilation
+A static library and a validation program can be compiled with CMake
+by typing the following into the command line:
+```
+mkdir build
+cd build
+cmake ..
+make
+```
 
-Argument        | Description
-----------------|---------------------------------------------
-`DEBUG=1`       | Activate debugging flags (`-g` and `-pg`)
-`O=#`           | Activate compiler optimization flag (`-O0`, `-O1`, `-O2`, or `-O3`, depending on input)
-`ARCH=#`        | Choose CUDA architecture (default is `sm_13`)
+The static library will be located at `build/libcuda_mstrsm.a` and the
+validation program at `build/test/cuda_mstrsm_test`
 
+## Validation program
 The validation program takes up to eight arguments:
 ```
-./validation m n dataType side uplo trans diag verbose
+build/test/cuda_mstrsm_test m n dataType side uplo trans diag verbose
 ```
 
 Argument   | Default | Description
