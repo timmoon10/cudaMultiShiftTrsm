@@ -1,5 +1,3 @@
-// TODO: handle side='L' and diag='U'
-
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -340,7 +338,7 @@ void unitTest(char side, char uplo, char trans, char diag) {
   double relError_S, relError_D, relError_C, relError_Z;
 
   // Machine precision
-  double eps_float = std::numeric_limits<float>::epsilon();
+  double eps_float  = std::numeric_limits<float>::epsilon();
   double eps_double = std::numeric_limits<double>::epsilon();
 
   // Float (S)
@@ -418,7 +416,7 @@ int main(int argc, char **argv) {
 
   // Check for help command line argument
   for(int i=1; i<argc; ++i) {
-    if(strcmp(argv[i],"--help")==0 || strcmp(argv[i],"-h")) {
+    if(strcmp(argv[i],"--help")==0 || strcmp(argv[i],"-h")==0) {
 
       // Display help page
       std::cout << "\n"
