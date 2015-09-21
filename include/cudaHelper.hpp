@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-
 #include <cuda.h>
 
 // Macro for error-checking CUDA calls

@@ -16,5 +16,7 @@ cuda_add_library(cuda_mstrsm ${cudaMultiShiftTrsm_SRC})
 cuda_add_cublas_to_target(cuda_mstrsm)
 target_link_libraries(cuda_mstrsm ${CUDA_LIBRARIES} ${CUBLAS_LIBRARIES})
 
-# Compile test program
-add_subdirectory(test)
+# Compile test program if TEST variable is activated
+if(TEST)
+  add_subdirectory(test)
+endif()
