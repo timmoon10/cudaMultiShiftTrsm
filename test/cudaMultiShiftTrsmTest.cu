@@ -10,6 +10,7 @@
 
 #include <cuda.h>
 #include <cublas_v2.h>
+#include <thrust/random.h>
 
 #include "gtest/gtest.h"
 #include "cudaHelper.hpp"
@@ -19,67 +20,12 @@
 
 using namespace std;
 
+/// cuBLAS handle
+static cublasHandle_t cublasHandle;
+
 // ===============================================
-// Test matrices
+// Helper functions
 // ===============================================
-
-/// Compute Gaussian random variable
-/** Uses Box-Muller transform to convert uniform distribution to
- *  Gaussian distribution
- */
-template <typename F>
-F randn() {
-  F u1 = ((F)std::rand())/RAND_MAX;
-  F u2 = ((F)std::rand())/RAND_MAX;
-  return std::sqrt(-2*std::log(u1))*std::cos(2*M_PI*u2);
-}
-template <>
-complex<float> randn<complex<float> >() {
-  float u1 = ((float)std::rand())/RAND_MAX;
-  float u2 = ((float)std::rand())/RAND_MAX;
-  return complex<float>(std::sqrt(-2*std::log(u1))*std::cos(2*M_PI*u2),
-			std::sqrt(-2*std::log(u1))*std::sin(2*M_PI*u2));
-}
-template <>
-complex<double> randn<complex<double> >() {
-  double u1 = ((double)std::rand())/RAND_MAX;
-  double u2 = ((double)std::rand())/RAND_MAX;
-  return complex<double>(std::sqrt(-2*std::log(u1))*std::cos(2*M_PI*u2),
-			 std::sqrt(-2*std::log(u1))*std::sin(2*M_PI*u2));
-}
-
-/// Generate matrix with Gaussian random variables
-template <typename F>
-void randn(int n, F *A) {
-#pragma omp parallel for
-  for(int i=0;i<n;++i)
-    A[i] = randn<F>();
-}
-
-/// Generate matrix with Cholesky factorization of random matrix
-template <typename F>
-void choleskyRandomMatrix(char uplo, int m, F *A) {
-
-  // Generate matrix with Gaussian random variables
-  F *temp = (F*) std::malloc(m*m*sizeof(F));
-  randn<F>(m*m,temp);
-
-  // Construct positive definite matrix
-  herk(uplo,'N',m,m,1,temp,m,0,A,m);
-
-  // Shift diagonal to improve condition number
-#pragma omp parallel for
-  for(int i=0;i<m;++i)
-    A[i+i*m] += std::sqrt(m);
-
-  // Perform Cholesky factorization
-  int info;
-  potrf(uplo, m, A, m, info);
-
-  // Clean up
-  std::free(temp);
-
-}
 
 /// Output matrix to stream
 template <typename F>
@@ -126,9 +72,6 @@ void printMatrix(ostream & os,
 // Validation program
 // ===============================================
 
-/// cuBLAS handle
-static cublasHandle_t cublasHandle;
-
 /// Run validation program
 template <typename F>
 double validation(int m, int n,
@@ -146,11 +89,15 @@ double validation(int m, int n,
   std::vector<F> shifts(n);
   std::vector<F> X(m*n);
   std::vector<F> residual(m*n);
+  std::vector<int> work_int(m);
 
   // Device memory
   F * A_device;
   F * B_device;
   F * shifts_device;
+
+  // LAPACK objects
+  int iseed[4] = {1234,321,2345,43}; // TODO: pick better seed
 
   // cuBLAS objects
   cublasStatus_t cublasStatus;
@@ -170,23 +117,6 @@ double validation(int m, int n,
   // -------------------------------------------------
   // Initialization
   // -------------------------------------------------
-
-  // Initialize matrices on host
-  alpha = randn<F>();
-  choleskyRandomMatrix<F>(uplo, m, A.data());
-  randn<F>(m*n, B.data());
-  randn<F>(n, shifts.data());
-
-  // Initialize memory on device
-  CUDA_CHECK(cudaMalloc(&A_device, m*m*sizeof(F)));
-  CUDA_CHECK(cudaMalloc(&B_device, m*n*sizeof(F)));
-  CUDA_CHECK(cudaMalloc(&shifts_device, n*sizeof(F)));
-  CUDA_CHECK(cudaMemcpy(A_device, A.data(), m*m*sizeof(F),
-			cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(B_device, B.data(), m*n*sizeof(F),
-			cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(shifts_device, shifts.data(), n*sizeof(F),
-			cudaMemcpyHostToDevice));
 
   // Initialize BLAS parameters
   side  = std::toupper(side);
@@ -215,6 +145,40 @@ double validation(int m, int n,
   default: WARNING("invalid parameter for diag"); exit(EXIT_FAILURE);
   }
 
+  // Generate triangular matrix
+  //   Perform LU factorization and copy L to upper triangle (diagonal
+  //   of U is preserved). This method is relatively well-conditioned.
+  larnv(3, iseed, m*m, A.data());
+  getrf(m, m, A.data(), m, work_int.data());
+  for(int j=0; j<m; ++j)
+    for(int i=0; i<j; ++i)
+      A[IDX(i,j,m)] = A[IDX(j,i,m)];
+
+  // Initialize shifts
+  //   If diag=U, make sure shifts are not close to -1 to avoid
+  //   ill-conditioning
+  larnv(3, iseed, n, shifts.data());
+  if(diag == 'U') {
+    for(int i=0; i<n; ++i)
+      while(std::abs(shifts[i] - F(-1.5)) < 3)
+	larnv(3, iseed, 1, shifts.data()+i);
+  }
+
+  // Initialize remaining matrices on host
+  larnv(3, iseed, 1,   &alpha);
+  larnv(3, iseed, m*n, B.data());
+
+  // Initialize memory on device
+  CUDA_CHECK(cudaMalloc(&A_device, m*m*sizeof(F)));
+  CUDA_CHECK(cudaMalloc(&B_device, m*n*sizeof(F)));
+  CUDA_CHECK(cudaMalloc(&shifts_device, n*sizeof(F)));
+  CUDA_CHECK(cudaMemcpy(A_device, A.data(), m*m*sizeof(F),
+			cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(B_device, B.data(), m*n*sizeof(F),
+			cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(shifts_device, shifts.data(), n*sizeof(F),
+			cudaMemcpyHostToDevice));
+
   // -------------------------------------------------
   // Test cudaMultiShiftTrsm
   // -------------------------------------------------
@@ -240,9 +204,9 @@ double validation(int m, int n,
   std::memcpy(residual.data(), X.data(), m*n*sizeof(F));
   trmm(side, uplo, trans, diag, m, n,
        1, A.data(), m, residual.data(), m);
-#pragma omp parallel for
   for(int i=0;i<n;++i)
-    axpy(m, shifts[i], X.data()+i*m, 1, residual.data()+i*m, 1);
+    axpy(m, shifts[i], X.data()+IDX(0,i,m), 1,
+	 residual.data()+IDX(0,i,m), 1);
   axpy(m*n, -alpha, B.data(), 1, residual.data(), 1);
   normResidual = nrm2(m*n,residual.data(),1);
   relError = normResidual/normB;
@@ -327,6 +291,10 @@ double validation(int m, int n,
 
 }
 
+// ===============================================
+// Unit tests
+// ===============================================
+
 /// Run validation program for each data type
 void unitTest(char side, char uplo, char trans, char diag) {
 
@@ -364,10 +332,6 @@ void unitTest(char side, char uplo, char trans, char diag) {
   EXPECT_LT(relError_Z, 100*eps_double);
   
 }
-
-// ===============================================
-// Unit tests
-// ===============================================
 
 TEST(cudaMultiShiftTrsmTest, LLNN) { unitTest('L','L','N','N'); }
 TEST(cudaMultiShiftTrsmTest, RLNN) { unitTest('R','L','N','N'); }

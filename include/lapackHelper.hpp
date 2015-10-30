@@ -157,20 +157,125 @@ extern "C" {
   void zpotrf_(char *uplo, int *n, void *A, int *lda, int *info);
 }
 inline
-void potrf(char uplo, int n, float * A, int lda, int &info) {
+int potrf(char uplo, int n, float * A, int lda) {
+  int info;
   spotrf_(&uplo,&n,A,&lda,&info);
+  return info;
 }
 inline
-void potrf(char uplo, int n, double * A, int lda, int &info) {
+int potrf(char uplo, int n, double * A, int lda) {
+  int info;
   dpotrf_(&uplo,&n,A,&lda,&info);
+  return info;
 }
 inline
-void potrf(char uplo, int n,
-	   std::complex<float> * A, int lda, int &info) {
+int potrf(char uplo, int n, std::complex<float> * A, int lda) {
+  int info;
   cpotrf_(&uplo,&n,A,&lda,&info);
+  return info;
 }
 inline
-void potrf(char uplo, int n,
-	   std::complex<double> * A, int lda, int &info) {
+int potrf(char uplo, int n, std::complex<double> * A, int lda) {
+  int info;
   zpotrf_(&uplo,&n,A,&lda,&info);
+  return info;
 }
+
+// GETRF
+extern "C" {
+  void sgetrf_(int *m, int *n, void *a, int *lda, int *ipiv, int *info);
+  void dgetrf_(int *m, int *n, void *a, int *lda, int *ipiv, int *info);
+  void cgetrf_(int *m, int *n, void *a, int *lda, int *ipiv, int *info);
+  void zgetrf_(int *m, int *n, void *a, int *lda, int *ipiv, int *info);
+}
+inline
+int getrf(int m, int n, float *a, int lda, int *ipiv) {
+  int info;
+  sgetrf_(&m, &n, a, &lda, ipiv, &info);
+  return info;
+}
+inline
+int getrf(int m, int n, double *a, int lda, int *ipiv) {
+  int info;
+  dgetrf_(&m, &n, a, &lda, ipiv, &info);
+  return info;
+}
+inline
+int getrf(int m, int n, std::complex<float> *a, int lda, int *ipiv) {
+  int info;
+  cgetrf_(&m, &n, a, &lda, ipiv, &info);
+  return info;
+}
+inline
+int getrf(int m, int n, std::complex<double> *a, int lda, int *ipiv) {
+  int info;
+  zgetrf_(&m, &n, a, &lda, ipiv, &info);
+  return info;
+}
+
+// LARNV
+extern "C" {
+  void slarnv_(int *idist, int *iseed, int *n, void *x);
+  void dlarnv_(int *idist, int *iseed, int *n, void *x);
+  void clarnv_(int *idist, int *iseed, int *n, void *x);
+  void zlarnv_(int *idist, int *iseed, int *n, void *x);
+}
+inline
+void larnv(int idist, int *iseed, int n, float *x) {
+  slarnv_(&idist, iseed, &n, x);
+}
+inline
+void larnv(int idist, int *iseed, int n, double *x) {
+  dlarnv_(&idist, iseed, &n, x);
+}
+inline
+void larnv(int idist, int *iseed, int n, std::complex<float> *x) {
+  clarnv_(&idist, iseed, &n, x);
+}
+inline
+void larnv(int idist, int *iseed, int n, std::complex<double> *x) {
+  zlarnv_(&idist, iseed, &n, x);
+}
+
+#if 0
+// LAROR
+//   TODO: this doesn't appear to be included in LAPACK library
+extern "C" {
+  void slaror_(char *side, char *init, int *m, int *n,
+	       float *A, int *lda, int *iseed, float *x, int *info);
+  void dlaror_(char *side, char *init, int *m, int *n,
+	       double *A, int *lda, int *iseed, double *x, int *info);
+  void claror_(char *side, char *init, int *m, int *n,
+	       void *A, int *lda, int *iseed,
+	       void *x, int *info);
+  void zlaror_(char *side, char *init, int *m, int *n,
+	       void *A, int *lda, int *iseed,
+	       void *x, int *info);
+}
+inline int laror(char side, char init, int m, int n,
+		 float *A, int lda, int *iseed, float *x) {
+  int info;
+  slaror_(&side, &init, &m, &n, A, &lda, iseed, x, &info);
+  return info;
+}
+inline int laror(char side, char init, int m, int n,
+		 double *A, int lda, int *iseed, double *x) {
+  int info;
+  dlaror_(&side, &init, &m, &n, A, &lda, iseed, x, &info);
+  return info;
+}
+inline int laror(char side, char init, int m, int n,
+		 std::complex<float> *A, int lda,
+		 int *iseed, std::complex<float> *x) {
+  int info;
+  claror_(&side, &init, &m, &n, A, &lda, iseed, x, &info);
+  return info;
+}
+inline int laror(char side, char init, int m, int n,
+		 std::complex<double> *A, int lda,
+		 int *iseed, std::complex<double> *x) {
+  int info;
+  zlaror_(&side, &init, &m, &n, A, &lda, iseed, x, &info);
+  return info;
+}
+#endif
