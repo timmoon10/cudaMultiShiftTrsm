@@ -9,6 +9,7 @@
 #include <sys/time.h> // Not implemented in Windows
 
 #include <cuda.h>
+#include <cuda_profiler_api.h>
 #include <cublas_v2.h>
 #include <thrust/random.h>
 
@@ -76,7 +77,7 @@ void printMatrix(ostream & os,
 template <typename F>
 double validation(int m, int n,
 		  char side, char uplo, char trans, char diag,
-		  bool benchmark, bool verbose) {
+		  bool benchmark, bool profile, bool verbose) {
 
   // -------------------------------------------------
   // Variable declarations
@@ -183,7 +184,10 @@ double validation(int m, int n,
   // Test cudaMultiShiftTrsm
   // -------------------------------------------------
 
+
   // Solve shifted triangular system
+  if(profile)
+    cudaProfilerStart();
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
   cublasStatus = cudaMstrsm::cudaMultiShiftTrsm<F>
@@ -191,6 +195,8 @@ double validation(int m, int n,
      m, n, &alpha, A_device, m, B_device, m, shifts_device);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
+  if(profile)
+    cudaProfilerStop();
   cudaMstrsmTime = ((timeEnd.tv_sec - timeStart.tv_sec)
 		    + (timeEnd.tv_usec - timeStart.tv_usec)/1e6);
   EXPECT_EQ(CUBLAS_STATUS_SUCCESS, cublasStatus);
@@ -311,24 +317,24 @@ void unitTest(char side, char uplo, char trans, char diag) {
 
   // Float (S)
   relError_S = validation<float>(m, n, side, uplo, trans, diag,
-				 false, false);
+				 false, false, false);
   EXPECT_LT(relError_S, 100*eps_float);
 
   // Double (D)
   relError_D = validation<double>(m, n, side, uplo, trans, diag,
-				  false, false);
+				  false, false, false);
   EXPECT_LT(relError_D, 100*eps_double);
   
   // Single-precision complex (C)
   relError_C
     = validation<std::complex<float> >(m, n, side, uplo, trans, diag,
-				       false, false);
+				       false, false, false);
   EXPECT_LT(relError_C, 100*eps_float);
 
   // Double-precision complex (Z)
   relError_Z 
     = validation<std::complex<double> >(m, n, side, uplo, trans, diag,
-					false, false);
+					false, false, false);
   EXPECT_LT(relError_Z, 100*eps_double);
   
 }
@@ -373,6 +379,7 @@ int main(int argc, char **argv) {
   char trans     = 'N';
   char diag      = 'N';
   bool benchmark = false;
+  bool profile   = false;
   bool verbose   = false;
 
   // Status flag
@@ -396,6 +403,7 @@ int main(int argc, char **argv) {
 		<< "--benchmark           Activate benchmark mode and disable Google Test."  << "\n"
 		<< "                      Performance of triangular solve is compared with" << "\n" 
 		<< "                      performance of cublas<T>trsm." << "\n"
+		<< "--profile             Activate focused profiling for nvprof or nvvp." << "\n"
 		<< "--verbose             Enable verbose output." << "\n"
 		<< "--m=[#]               Dimension of triangular matrix." << "\n"
 		<< "--n=[#]               Number of right-hand-side vectors." << "\n"
@@ -429,6 +437,8 @@ int main(int argc, char **argv) {
     std::string currArg(argv[i]);
     if(currArg.compare("--benchmark")==0)
       benchmark = true;
+    else if(currArg.compare("--profile")==0)
+      profile = true;
     else if(currArg.compare("--verbose")==0)
       verbose = true;
     else if(currArg.find("--m=")==0)
@@ -476,15 +486,17 @@ int main(int argc, char **argv) {
   // Perform benchmark
   if(benchmark) {
     if(dataType == 'S')
-      validation<float>(m,n,side,uplo,trans,diag,true,verbose);
+      validation<float>(m,n,side,uplo,trans,diag,
+			true,profile,verbose);
     else if(dataType == 'D')
-      validation<double>(m,n,side,uplo,trans,diag,true,verbose);
+      validation<double>(m,n,side,uplo,trans,diag,
+			 true,profile,verbose);
     else if(dataType == 'C')
       validation<std::complex<float> >(m,n,side,uplo,trans,diag,
-				       true,verbose);
+				       true,profile,verbose);
     else if(dataType == 'Z')
       validation<std::complex<double> >(m,n,side,uplo,trans,diag,
-					true,verbose);
+					true,profile,verbose);
     else
       WARNING("invalid data type");
 
