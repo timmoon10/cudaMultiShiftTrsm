@@ -24,7 +24,7 @@ namespace cudaMstrsm {
     float conj(float x) {return x;}
     __host__ __device__ inline
     double conj(double x) {return x;}
-
+    
     // -------------------------------------------
     // CUDA Kernels
     // -------------------------------------------
@@ -35,8 +35,7 @@ namespace cudaMstrsm {
      *  the y-dimension.
      */
     template <typename F>
-    __global__ void LLN_block(const bool unitDiagonal,
-			      const int m,
+    __global__ void LLN_block(const int m,
 			      const int n,
 			      const F * __restrict__ A,
 			      const int lda,
@@ -69,18 +68,8 @@ namespace cudaMstrsm {
 	for(int i=0; i<m; ++i) {
 
 	  // Transfer matrix column from global to private memory
-	  if(unitDiagonal) {
-	    // Matrix is unit triangular
-	    if(tidx==i)
-	      private_A = 1;
-	    else if(i<tidx && tidx<m)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
-	  else {
-	    // Matrix is not unit triangular
-	    if(i<=tidx && tidx<m)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
+	  if(i<=tidx && tidx<m)
+	    private_A = A[IDX(tidx,i,lda)];
 
 	  // Obtain solution at index i
 	  __syncthreads();
@@ -113,8 +102,7 @@ namespace cudaMstrsm {
      *  the y-dimension.
      */
     template <typename F>
-    __global__ void LUN_block(const bool unitDiagonal,
-			      const int m,
+    __global__ void LUN_block(const int m,
 			      const int n,
 			      const F * __restrict__ A,
 			      const int lda,
@@ -147,18 +135,8 @@ namespace cudaMstrsm {
 	for(int i=m-1; i>=0; --i) {
 
 	  // Transfer matrix column from global to private memory
-	  if(unitDiagonal) {
-	    // Matrix is unit triangular
-	    if(tidx==i)
-	      private_A = 1;
-	    else if(tidx<i)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
-	  else {
-	    // Matrix is not unit triangular
-	    if(tidx<=i)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
+	  if(tidx<=i)
+	    private_A = A[IDX(tidx,i,lda)];
 
 	  // Obtain solution at index i
 	  __syncthreads();
@@ -191,8 +169,7 @@ namespace cudaMstrsm {
      *  the y-dimension.
      */
     template <typename F>
-    __global__ void LUT_block(const bool unitDiagonal,
-			      const bool conjugate,
+    __global__ void LUT_block(const bool conjugate,
 			      const int m,
 			      const int n,
 			      const F * __restrict__ A,
@@ -226,18 +203,8 @@ namespace cudaMstrsm {
 	for(int i=0; i<m; ++i) {
 
 	  // Transfer matrix column from global to private memory
-	  if(unitDiagonal) {
-	    // Matrix is unit triangular
-	    if(tidx==i)
-	      private_A = 1;
-	    else if(tidx<i)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
-	  else {
-	    // Matrix is not unit triangular
-	    if(tidx<=i)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
+	  if(tidx<=i)
+	    private_A = A[IDX(tidx,i,lda)];
 
 	  // Conjugate matrix if option is selected
 	  if(conjugate)
@@ -279,8 +246,7 @@ namespace cudaMstrsm {
      *  the y-dimension.
      */
     template <typename F>
-    __global__ void LLT_block(const bool unitDiagonal,
-			      const bool conjugate,
+    __global__ void LLT_block(const bool conjugate,
 			      const int m,
 			      const int n,
 			      const F * __restrict__ A,
@@ -314,18 +280,8 @@ namespace cudaMstrsm {
 	for(int i=m-1; i>=0; --i) {
 
 	  // Transfer matrix column from global to private memory
-	  if(unitDiagonal) {
-	    // Matrix is unit triangular
-	    if(tidx==i)
-	      private_A = 1;
-	    else if(i<tidx && tidx<m)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
-	  else {
-	    // Matrix is not unit triangular
-	    if(i<=tidx && tidx<m)
-	      private_A = A[IDX(tidx,i,lda)];
-	  }
+	  if(i<=tidx && tidx<m)
+	    private_A = A[IDX(tidx,i,lda)];
 
 	  // Conjugate matrix if option is selected
 	  if(conjugate)
@@ -370,15 +326,18 @@ namespace cudaMstrsm {
   /// Solve triangular systems with multiple shifts
   template<typename F>
   cublasStatus_t cudaMultiShiftTrsm(cublasHandle_t handle,
-				    const cublasSideMode_t side,
-				    const cublasFillMode_t uplo,
-				    const cublasOperation_t trans,
-				    const cublasDiagType_t diag,
-				    const int m, const int n,
-				    const F * __restrict__ alpha,
-				    const F * __restrict__ A, const int lda,
-				    F * __restrict__ B, const int ldb,
+				    cublasFillMode_t uplo,
+				    cublasOperation_t trans,
+				    int m, int n,
+				    const F * alpha,
+				    const F * __restrict__ A, int lda,
+				    F * __restrict__ B, int ldb,
 				    const F * __restrict__ shifts) {
+
+    // Useful constants
+    const F zero   = 0;
+    const F one    = 1;
+    const F negOne = -1;
 
     // Initialize CUDA and cuBLAS objects
     cublasStatus_t status;
@@ -396,55 +355,46 @@ namespace cudaMstrsm {
     if(cudaStatus != cudaSuccess)
       return CUBLAS_STATUS_EXECUTION_FAILED;
 
+    // Set pointer mode to host
+    status = cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST);
+    if(status != CUBLAS_STATUS_SUCCESS)
+      return status;
+    
     // Report invalid parameters
     if(m < 0) {
-      WARNING("argument 6 is invalid (m<0)");
+      WARNING("argument 4 is invalid (m<0)");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(n < 0) {
-      WARNING("argument 7 is invalid (n<0)");
+      WARNING("argument 5 is invalid (n<0)");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(lda < max(1,m)){
-      WARNING("argument 10 is invalid (lda<max(1,m))");
+      WARNING("argument 8 is invalid (lda<max(1,m))");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
     if(ldb < max(1,m)) {
-      WARNING("argument 12 is invalid (lda<max(1,m))");
+      WARNING("argument 10 is invalid (lda<max(1,m))");
       return CUBLAS_STATUS_INVALID_VALUE;
     }
 
-    // Error if an unimplemented feature is called
-    // TODO: remove this section when possible
-    if(side != CUBLAS_SIDE_LEFT) {
-      WARNING("invalid input in argument 2 "
-	      "(side=CUBLAS_SIDE_RIGHT is not yet implemented)");
-      return CUBLAS_STATUS_NOT_SUPPORTED;
-    }
-
     // Return zero if right hand side is zero
-    if(alpha == 0) {
-      for(int i=0; i<n; ++i) {
-	cudaStatus = cudaMemsetAsync(B+IDX(0,i,ldb),0,m*sizeof(F),stream);
-	if(cudaStatus != cudaSuccess) {
-	  return CUBLAS_STATUS_INTERNAL_ERROR;
-	}
-      }
+    if(alpha==0 || *alpha == F(0)) {
+      status = cublasGeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n,
+			  &zero, NULL, m, &zero, NULL, m, B, ldb);
+      if(status != CUBLAS_STATUS_SUCCESS)
+	return status;
       return CUBLAS_STATUS_SUCCESS;
     }
 
     // Scale right hand side
-    for(int i=0; i<n; ++i) {
-      status = cublasScal(handle, m, alpha, B+IDX(0,i,ldb), 1);
-      if(status != CUBLAS_STATUS_SUCCESS)
-	return status;
-    }
+    status = cublasGeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n,
+			alpha, B, ldb, &zero, NULL, m, B, ldb);
+    if(status != CUBLAS_STATUS_SUCCESS)
+      return status;
 
     // Misc initialization
-    bool unitDiagonal = (diag==CUBLAS_DIAG_UNIT);
-    bool conjugate    = (trans==CUBLAS_OP_C);
-    const F one    = 1;
-    const F negOne = -1;
+    bool conjugate = (trans==CUBLAS_OP_C);
 
     // Initialize CUDA grid dimensions
     dim3 blockDim, gridDim;
@@ -459,9 +409,7 @@ namespace cudaMstrsm {
     int nb = (m+BLOCK_SIZE-1)/BLOCK_SIZE;
 
     // LLN case
-    if(side==CUBLAS_SIDE_LEFT
-       && uplo==CUBLAS_FILL_MODE_LOWER
-       && trans==CUBLAS_OP_N) {
+    if(uplo==CUBLAS_FILL_MODE_LOWER && trans==CUBLAS_OP_N) {
       
       // Current row in A
       int i = 0;
@@ -469,7 +417,7 @@ namespace cudaMstrsm {
       // Partition matrix into subblocks
       for(int b=0; b<nb-1; ++b) {
 	LLN_block <<< gridDim, blockDim, 0, stream >>>
-	  (unitDiagonal,BLOCK_SIZE,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
+	  (BLOCK_SIZE,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
 	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
 			    m-(i+BLOCK_SIZE),n,BLOCK_SIZE,
 			    &negOne,A+IDX(i+BLOCK_SIZE,i,lda),lda,
@@ -481,14 +429,12 @@ namespace cudaMstrsm {
 
       // Final subblock
       LLN_block <<< gridDim, blockDim, 0, stream >>>
-	(unitDiagonal,m-i,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
+	(m-i,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
 
     }
 
     // LUN case
-    else if(side==CUBLAS_SIDE_LEFT
-	    && uplo==CUBLAS_FILL_MODE_UPPER
-	    && trans==CUBLAS_OP_N) {
+    else if(uplo==CUBLAS_FILL_MODE_UPPER && trans==CUBLAS_OP_N) {
 
       // Current row in A
       int i = m-BLOCK_SIZE;
@@ -496,7 +442,7 @@ namespace cudaMstrsm {
       // Partition matrix into subblocks
       for(int b=nb-1; b>0; --b) {
 	LUN_block <<< gridDim, blockDim, 0, stream >>>
-	  (unitDiagonal,BLOCK_SIZE,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
+	  (BLOCK_SIZE,n,A+IDX(i,i,lda),lda,B+i,ldb,shifts);
 	status = cublasGemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
 			    i,n,BLOCK_SIZE,&negOne,A+IDX(0,i,lda),lda,
 			    B+i,ldb,&one,B,ldb);
@@ -507,14 +453,12 @@ namespace cudaMstrsm {
 
       // Final subblock
       LUN_block <<< gridDim, blockDim, 0, stream >>>
-	(unitDiagonal,i+BLOCK_SIZE,n,A,lda,B,ldb,shifts);
+	(i+BLOCK_SIZE,n,A,lda,B,ldb,shifts);
 
     }
 
     // LUT and LUC cases
-    else if(side==CUBLAS_SIDE_LEFT
-	    && uplo==CUBLAS_FILL_MODE_UPPER
-	    && trans!=CUBLAS_OP_N) {
+    else if(uplo==CUBLAS_FILL_MODE_UPPER && trans!=CUBLAS_OP_N) {
 
       // Current column in A
       int i = 0;
@@ -522,7 +466,7 @@ namespace cudaMstrsm {
       // Partition matrix into subblocks
       for(int b=0; b<nb-1; ++b) {
 	LUT_block <<< gridDim, BLOCK_SIZE, 0, stream >>>
-	  (unitDiagonal,conjugate,BLOCK_SIZE,n,
+	  (conjugate,BLOCK_SIZE,n,
 	   A+IDX(i,i,lda),lda,B+IDX(i,0,ldb),ldb,shifts);
 	status = cublasGemm(handle,trans,CUBLAS_OP_N,
 			    m-(i+BLOCK_SIZE),n,BLOCK_SIZE,
@@ -536,15 +480,13 @@ namespace cudaMstrsm {
 
       // Final subblock
       LUT_block <<< gridDim, blockDim, 0, stream >>>
-	(unitDiagonal,conjugate,m-i,n,
+	(conjugate,m-i,n,
 	 A+IDX(i,i,lda),lda,B+IDX(i,0,ldb),ldb,shifts);
 
     }
 
     // LLT and LLC cases
-    else if(side==CUBLAS_SIDE_LEFT
-	    && uplo==CUBLAS_FILL_MODE_LOWER
-	    && trans!=CUBLAS_OP_N) {
+    else if(uplo==CUBLAS_FILL_MODE_LOWER && trans!=CUBLAS_OP_N) {
 
       // Current column in A
       int i = m-BLOCK_SIZE;
@@ -552,7 +494,7 @@ namespace cudaMstrsm {
       // Partition matrix into subblocks
       for(int b=nb-1; b>0; --b) {
 	LLT_block <<< gridDim, BLOCK_SIZE, 0, stream >>>
-	  (unitDiagonal,conjugate,BLOCK_SIZE,n,
+	  (conjugate,BLOCK_SIZE,n,
 	   A+IDX(i,i,lda),lda,B+i,ldb,shifts);
 	status = cublasGemm(handle,trans,CUBLAS_OP_N,
 			    i,n,BLOCK_SIZE,&negOne,A+IDX(i,0,lda),lda,
@@ -564,7 +506,7 @@ namespace cudaMstrsm {
 
       // Final subblock
       LLT_block <<< gridDim, blockDim, 0, stream >>>
-	(unitDiagonal,conjugate,i+BLOCK_SIZE,n,A,lda,B,ldb,shifts);
+	(conjugate,i+BLOCK_SIZE,n,A,lda,B,ldb,shifts);
 
     }
     
@@ -579,56 +521,52 @@ namespace cudaMstrsm {
   template <>
   cublasStatus_t cudaMultiShiftTrsm<std::complex<float> >
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const std::complex<float> * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const std::complex<float> * alpha,
    const std::complex<float> * __restrict__ A, int lda,
    std::complex<float> * __restrict__ B, int ldb,
    const std::complex<float> * __restrict__ shifts) {
     return cudaMultiShiftTrsm<thrust::complex<float> >
-      (handle,side,uplo,trans,diag,m,n,(thrust::complex<float>*)alpha,
+      (handle,uplo,trans,m,n,(thrust::complex<float>*)alpha,
        (thrust::complex<float>*)A,lda,(thrust::complex<float>*)B,ldb,
        (thrust::complex<float>*)shifts);
   }
   template <>
   cublasStatus_t cudaMultiShiftTrsm<cuFloatComplex>
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const cuFloatComplex * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const cuFloatComplex * alpha,
    const cuFloatComplex * __restrict__ A, int lda,
    cuFloatComplex * __restrict__ B, int ldb,
    const cuFloatComplex * __restrict__ shifts) {
     return cudaMultiShiftTrsm<thrust::complex<float> >
-      (handle,side,uplo,trans,diag,m,n,(thrust::complex<float>*)alpha,
+      (handle,uplo,trans,m,n,(thrust::complex<float>*)alpha,
        (thrust::complex<float>*)A,lda,(thrust::complex<float>*)B,ldb,
        (thrust::complex<float>*)shifts);
   }
   template <>
   cublasStatus_t cudaMultiShiftTrsm<std::complex<double> >
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const std::complex<double> * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const std::complex<double> * alpha,
    const std::complex<double> * __restrict__ A, int lda,
    std::complex<double> * __restrict__ B, int ldb,
    const std::complex<double> * __restrict__ shifts) {
     return cudaMultiShiftTrsm<thrust::complex<double> >
-      (handle,side,uplo,trans,diag,m,n,(thrust::complex<double>*)alpha,
+      (handle,uplo,trans,m,n,(thrust::complex<double>*)alpha,
        (thrust::complex<double>*)A,lda,(thrust::complex<double>*)B,ldb,
        (thrust::complex<double>*)shifts);
   }
   template <>
   cublasStatus_t cudaMultiShiftTrsm<cuDoubleComplex>
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const cuDoubleComplex * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const cuDoubleComplex * alpha,
    const cuDoubleComplex * __restrict__ A, int lda,
    cuDoubleComplex * __restrict__ B, int ldb,
    const cuDoubleComplex * __restrict__ shifts) {
     return cudaMultiShiftTrsm<thrust::complex<double> >
-      (handle,side,uplo,trans,diag,m,n,(thrust::complex<double>*)alpha,
+      (handle,uplo,trans,m,n,(thrust::complex<double>*)alpha,
        (thrust::complex<double>*)A,lda,(thrust::complex<double>*)B,ldb,
        (thrust::complex<double>*)shifts);
   }
@@ -638,33 +576,29 @@ namespace cudaMstrsm {
   // -------------------------------------------
   template cublasStatus_t cudaMultiShiftTrsm<float>
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const float * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const float * alpha,
    const float * __restrict__ A, int lda,
    float * __restrict__ B, int ldb,
    const float * __restrict__ shifts);
   template cublasStatus_t cudaMultiShiftTrsm<double>
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const double * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const double * alpha,
    const double * __restrict__ A, int lda,
    double * __restrict__ B, int ldb,
    const double * __restrict__ shifts);
   template cublasStatus_t cudaMultiShiftTrsm<thrust::complex<float> >
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const thrust::complex<float> * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const thrust::complex<float> * alpha,
    const thrust::complex<float> * __restrict__ A, int lda,
    thrust::complex<float> * __restrict__ B, int ldb,
    const thrust::complex<float> * __restrict__ shifts);
   template cublasStatus_t cudaMultiShiftTrsm<thrust::complex<double> >
   (cublasHandle_t handle,
-   cublasSideMode_t side, cublasFillMode_t uplo,
-   cublasOperation_t trans, cublasDiagType_t diag,
-   int m, int n, const thrust::complex<double> * __restrict__ alpha,
+   cublasFillMode_t uplo, cublasOperation_t trans,
+   int m, int n, const thrust::complex<double> * alpha,
    const thrust::complex<double> * __restrict__ A, int lda,
    thrust::complex<double> * __restrict__ B, int ldb,
    const thrust::complex<double> * __restrict__ shifts);

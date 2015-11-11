@@ -11,7 +11,6 @@
 #include <cuda.h>
 #include <cuda_profiler_api.h>
 #include <cublas_v2.h>
-#include <thrust/random.h>
 
 #include "gtest/gtest.h"
 #include "cudaHelper.hpp"
@@ -31,30 +30,22 @@ static cublasHandle_t cublasHandle;
 /// Output matrix to stream
 template <typename F>
 void printMatrix(ostream & os,
-		 const char uplo, const char diag,
+		 const char uplo,
 		 const int m, const int n, 
 		 const F * A, const int lda) {
 
   os << "    [[";
   for(int i=0;i<m;++i) {
     if(std::toupper(uplo) == 'L') {
-      for(int j=0;j<i;++j)
+      for(int j=0;j<=i;++j)
 	os << A[i+j*lda] << " ";
-      if(std::toupper(diag)=='U')
-	os << "1 ";
-      else
-	os << A[i+i*lda] << " ";
       for(int j=i+1;j<n;++j)
 	os << "0 ";
     }
     else if(std::toupper(uplo) == 'U') {
       for(int j=0;j<i;++j)
 	os << "0 ";
-      if(std::toupper(diag)=='U')
-	os << "1 ";
-      else
-	os << A[i+i*lda] << " ";
-      for(int j=i+1;j<n;++j)
+      for(int j=i;j<n;++j)
 	os << A[i+j*lda] << " ";
     }
     else {
@@ -76,7 +67,7 @@ void printMatrix(ostream & os,
 /// Run validation program
 template <typename F>
 double validation(int m, int n,
-		  char side, char uplo, char trans, char diag,
+		  char uplo, char trans,
 		  bool benchmark, bool profile, bool verbose) {
 
   // -------------------------------------------------
@@ -102,10 +93,8 @@ double validation(int m, int n,
 
   // cuBLAS objects
   cublasStatus_t cublasStatus;
-  cublasSideMode_t  cublasSide;
   cublasFillMode_t  cublasUplo;
   cublasOperation_t cublasTrans;
-  cublasDiagType_t  cublasDiag;
 
   // Timing
   timeval timeStart, timeEnd;
@@ -120,15 +109,8 @@ double validation(int m, int n,
   // -------------------------------------------------
 
   // Initialize BLAS parameters
-  side  = std::toupper(side);
   uplo  = std::toupper(uplo);
   trans = std::toupper(trans);
-  diag  = std::toupper(diag);
-  switch(side) {
-  case 'L': cublasSide = CUBLAS_SIDE_LEFT; break;
-  case 'R': cublasSide = CUBLAS_SIDE_RIGHT; break;
-  default: WARNING("invalid parameter for side"); exit(EXIT_FAILURE);
-  }
   switch(uplo) {
   case 'L': cublasUplo = CUBLAS_FILL_MODE_LOWER; break;
   case 'U': cublasUplo = CUBLAS_FILL_MODE_UPPER; break;
@@ -139,11 +121,6 @@ double validation(int m, int n,
   case 'T': cublasTrans = CUBLAS_OP_T; break;
   case 'C': cublasTrans = CUBLAS_OP_C; break;
   default: WARNING("invalid parameter for trans"); exit(EXIT_FAILURE);
-  }
-  switch(diag) {
-  case 'N': cublasDiag = CUBLAS_DIAG_NON_UNIT; break;
-  case 'U': cublasDiag = CUBLAS_DIAG_UNIT; break;
-  default: WARNING("invalid parameter for diag"); exit(EXIT_FAILURE);
   }
 
   // Generate triangular matrix
@@ -156,14 +133,7 @@ double validation(int m, int n,
       A[IDX(i,j,m)] = A[IDX(j,i,m)];
 
   // Initialize shifts
-  //   If diag=U, make sure shifts are not close to -1 to avoid
-  //   ill-conditioning
   larnv(3, iseed, n, shifts.data());
-  if(diag == 'U') {
-    for(int i=0; i<n; ++i)
-      while(std::abs(shifts[i] - F(-1.5)) < 3)
-	larnv(3, iseed, 1, shifts.data()+i);
-  }
 
   // Initialize remaining matrices on host
   larnv(3, iseed, 1,   &alpha);
@@ -191,7 +161,7 @@ double validation(int m, int n,
   cudaDeviceSynchronize();
   gettimeofday(&timeStart, NULL);
   cublasStatus = cudaMstrsm::cudaMultiShiftTrsm<F>
-    (cublasHandle, cublasSide, cublasUplo, cublasTrans, cublasDiag,
+    (cublasHandle, cublasUplo, cublasTrans,
      m, n, &alpha, A_device, m, B_device, m, shifts_device);
   cudaDeviceSynchronize();
   gettimeofday(&timeEnd, NULL);
@@ -208,7 +178,7 @@ double validation(int m, int n,
   // Check error in solution
   normB = nrm2(m*n, B.data(), 1);
   std::memcpy(residual.data(), X.data(), m*n*sizeof(F));
-  trmm(side, uplo, trans, diag, m, n,
+  trmm('L', uplo, trans, 'N', m, n,
        1, A.data(), m, residual.data(), m);
   for(int i=0;i<n;++i)
     axpy(m, shifts[i], X.data()+IDX(0,i,m), 1,
@@ -232,8 +202,8 @@ double validation(int m, int n,
     // Solve triangular system
     cudaDeviceSynchronize();
     gettimeofday(&timeStart, NULL);
-    CUBLAS_CHECK(cublasTrsm(cublasHandle, cublasSide, cublasUplo,
-			    cublasTrans, cublasDiag, m, n,
+    CUBLAS_CHECK(cublasTrsm(cublasHandle, CUBLAS_SIDE_LEFT, cublasUplo,
+			    cublasTrans, CUBLAS_DIAG_NON_UNIT, m, n,
 			    &alpha, A_device, m, B_device, m));
     cudaDeviceSynchronize();
     gettimeofday(&timeEnd, NULL);
@@ -280,13 +250,13 @@ double validation(int m, int n,
 	      << "----------------------------------------\n"
 	      << "  alpha = " << alpha << "\n";
     std::cout << "  shifts =\n";
-    printMatrix<F>(std::cout,'N','N',1,n,shifts.data(),1);
+    printMatrix<F>(std::cout,'N',1,n,shifts.data(),1);
     std::cout << "  A =\n";
-    printMatrix<F>(std::cout,uplo,diag,m,m,A.data(),m);
+    printMatrix<F>(std::cout,uplo,m,m,A.data(),m);
     std::cout << "  B =\n";
-    printMatrix<F>(std::cout,'N','N',m,n,B.data(),m);
+    printMatrix<F>(std::cout,'N',m,n,B.data(),m);
     std::cout << "  X =\n";
-    printMatrix<F>(std::cout,'N','N',m,n,X.data(),m);
+    printMatrix<F>(std::cout,'N',m,n,X.data(),m);
   }
 
   // Clean up and return
@@ -302,7 +272,7 @@ double validation(int m, int n,
 // ===============================================
 
 /// Run validation program for each data type
-void unitTest(char side, char uplo, char trans, char diag) {
+void unitTest(char uplo, char trans) {
 
   // Parameters
   int m = 723;
@@ -316,53 +286,35 @@ void unitTest(char side, char uplo, char trans, char diag) {
   double eps_double = std::numeric_limits<double>::epsilon();
 
   // Float (S)
-  relError_S = validation<float>(m, n, side, uplo, trans, diag,
+  relError_S = validation<float>(m, n, uplo, trans,
 				 false, false, false);
   EXPECT_LT(relError_S, 100*eps_float);
 
   // Double (D)
-  relError_D = validation<double>(m, n, side, uplo, trans, diag,
+  relError_D = validation<double>(m, n, uplo, trans,
 				  false, false, false);
   EXPECT_LT(relError_D, 100*eps_double);
   
   // Single-precision complex (C)
   relError_C
-    = validation<std::complex<float> >(m, n, side, uplo, trans, diag,
+    = validation<std::complex<float> >(m, n, uplo, trans,
 				       false, false, false);
   EXPECT_LT(relError_C, 100*eps_float);
 
   // Double-precision complex (Z)
   relError_Z 
-    = validation<std::complex<double> >(m, n, side, uplo, trans, diag,
+    = validation<std::complex<double> >(m, n, uplo, trans,
 					false, false, false);
   EXPECT_LT(relError_Z, 100*eps_double);
   
 }
 
-TEST(cudaMultiShiftTrsmTest, LLNN) { unitTest('L','L','N','N'); }
-TEST(cudaMultiShiftTrsmTest, RLNN) { unitTest('R','L','N','N'); }
-TEST(cudaMultiShiftTrsmTest, LUNN) { unitTest('L','U','N','N'); }
-TEST(cudaMultiShiftTrsmTest, RUNN) { unitTest('R','U','N','N'); }
-TEST(cudaMultiShiftTrsmTest, LLTN) { unitTest('L','L','T','N'); }
-TEST(cudaMultiShiftTrsmTest, RLTN) { unitTest('R','L','T','N'); }
-TEST(cudaMultiShiftTrsmTest, LUTN) { unitTest('L','U','T','N'); }
-TEST(cudaMultiShiftTrsmTest, RUTN) { unitTest('R','U','T','N'); }
-TEST(cudaMultiShiftTrsmTest, LLCN) { unitTest('L','L','C','N'); }
-TEST(cudaMultiShiftTrsmTest, RLCN) { unitTest('R','L','C','N'); }
-TEST(cudaMultiShiftTrsmTest, LUCN) { unitTest('L','U','C','N'); }
-TEST(cudaMultiShiftTrsmTest, RUCN) { unitTest('R','U','C','N'); }
-TEST(cudaMultiShiftTrsmTest, LLNU) { unitTest('L','L','N','U'); }
-TEST(cudaMultiShiftTrsmTest, RLNU) { unitTest('R','L','N','U'); }
-TEST(cudaMultiShiftTrsmTest, LUNU) { unitTest('L','U','N','U'); }
-TEST(cudaMultiShiftTrsmTest, RUNU) { unitTest('R','U','N','U'); }
-TEST(cudaMultiShiftTrsmTest, LLTU) { unitTest('L','L','T','U'); }
-TEST(cudaMultiShiftTrsmTest, RLTU) { unitTest('R','L','T','U'); }
-TEST(cudaMultiShiftTrsmTest, LUTU) { unitTest('L','U','T','U'); }
-TEST(cudaMultiShiftTrsmTest, RUTU) { unitTest('R','U','T','U'); }
-TEST(cudaMultiShiftTrsmTest, LLCU) { unitTest('L','L','C','U'); }
-TEST(cudaMultiShiftTrsmTest, RLCU) { unitTest('R','L','C','U'); }
-TEST(cudaMultiShiftTrsmTest, LUCU) { unitTest('L','U','C','U'); }
-TEST(cudaMultiShiftTrsmTest, RUCU) { unitTest('R','U','C','U'); }
+TEST(cudaMultiShiftTrsmTest, LLNN) { unitTest('L','N'); }
+TEST(cudaMultiShiftTrsmTest, LUNN) { unitTest('U','N'); }
+TEST(cudaMultiShiftTrsmTest, LLTN) { unitTest('L','T'); }
+TEST(cudaMultiShiftTrsmTest, LUTN) { unitTest('U','T'); }
+TEST(cudaMultiShiftTrsmTest, LLCN) { unitTest('L','C'); }
+TEST(cudaMultiShiftTrsmTest, LUCN) { unitTest('U','C'); }
 
 // ===============================================
 // Main function
@@ -374,10 +326,8 @@ int main(int argc, char **argv) {
   int  m         = 1000;
   int  n         = 50;
   char dataType  = 'S';
-  char side      = 'L';
   char uplo      = 'L';
   char trans     = 'N';
-  char diag      = 'N';
   bool benchmark = false;
   bool profile   = false;
   bool verbose   = false;
@@ -408,10 +358,8 @@ int main(int argc, char **argv) {
 		<< "--m=[#]               Dimension of triangular matrix." << "\n"
 		<< "--n=[#]               Number of right-hand-side vectors." << "\n"
 		<< "--datatype=[S/D/C/Z]  Floating-point data type." << "\n"
-		<< "--side=[L/R]          Side to apply triangular matrix." << "\n"
 		<< "--uplo=[L/U]          Type of triangular matrix." << "\n"
-		<< "--trans=[N/T/C]       Whether to transpose triangular matrix." << "\n"
-		<< "--diag=[N/U]          Whether to transpose triangular matrix." << "\n";
+		<< "--trans=[N/T/C]       Whether to transpose triangular matrix." << "\n";
       std::cout << std::flush;
 
       // Display help page for Google Test
@@ -447,14 +395,10 @@ int main(int argc, char **argv) {
       n = std::atoi(currArg.c_str()+std::strlen("--n="));
     else if(currArg.find("--datatype=")==0)
       dataType = std::toupper(currArg[std::strlen("--datatype=")]);
-    else if(currArg.find("--side=")==0)
-      side = std::toupper(currArg[std::strlen("--side=")]);
     else if(currArg.find("--uplo=")==0)
       uplo = std::toupper(currArg[std::strlen("--uplo=")]);
     else if(currArg.find("--trans=")==0)
       trans = std::toupper(currArg[std::strlen("--trans=")]);
-    else if(currArg.find("--diag=")==0)
-      diag = std::toupper(currArg[std::strlen("--diag=")]);
     else {
       char message[512];
       std::sprintf(message, "invalid argument (%s)", currArg.c_str());
@@ -474,10 +418,8 @@ int main(int argc, char **argv) {
 	      << "m         = " << m << "\n"
 	      << "n         = " << n << "\n"
 	      << "Data type = " << dataType << "\n"
-	      << "side      = " << side << "\n"
 	      << "uplo      = " << uplo << "\n"
-	      << "trans     = " << trans << "\n"
-	      << "diag      = " << diag << "\n";
+	      << "trans     = " << trans << "\n";
   }
 
   // Initialize cuBLAS
@@ -486,16 +428,16 @@ int main(int argc, char **argv) {
   // Perform benchmark
   if(benchmark) {
     if(dataType == 'S')
-      validation<float>(m,n,side,uplo,trans,diag,
+      validation<float>(m,n,uplo,trans,
 			true,profile,verbose);
     else if(dataType == 'D')
-      validation<double>(m,n,side,uplo,trans,diag,
+      validation<double>(m,n,uplo,trans,
 			 true,profile,verbose);
     else if(dataType == 'C')
-      validation<std::complex<float> >(m,n,side,uplo,trans,diag,
+      validation<std::complex<float> >(m,n,uplo,trans,
 				       true,profile,verbose);
     else if(dataType == 'Z')
-      validation<std::complex<double> >(m,n,side,uplo,trans,diag,
+      validation<std::complex<double> >(m,n,uplo,trans,
 					true,profile,verbose);
     else
       WARNING("invalid data type");

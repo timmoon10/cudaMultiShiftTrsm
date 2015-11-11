@@ -327,3 +327,63 @@ cublasStatus_t cublasTrsm(cublasHandle_t handle,
 		     (cuDoubleComplex*)alpha,(cuDoubleComplex*)A,lda,
 		     (cuDoubleComplex*)B,ldb);
 }
+
+// GEAM
+inline
+cublasStatus_t cublasGeam(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n,
+			  const float *alpha,
+			  const float *A, int lda,
+			  const float *beta,
+			  const float *B, int ldb,
+			  float *C, int ldc) {
+  return cublasSgeam(handle, transa, transb, m, n,
+		     alpha, A, lda, beta, B, ldb, C, ldc);
+}
+inline
+cublasStatus_t cublasGeam(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n,
+			  const double *alpha,
+			  const double *A, int lda,
+			  const double *beta,
+			  const double *B, int ldb,
+			  double *C, int ldc) {
+  return cublasDgeam(handle, transa, transb, m, n,
+		     alpha, A, lda, beta, B, ldb, C, ldc);
+}
+inline
+cublasStatus_t cublasGeam(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n,
+			  const thrust::complex<float> *alpha,
+			  const thrust::complex<float> *A, int lda,
+			  const thrust::complex<float> *beta,
+			  const thrust::complex<float> *B, int ldb,
+			  thrust::complex<float> *C, int ldc) {
+  return cublasCgeam(handle, transa, transb, m, n,
+		     (cuFloatComplex*)alpha, (cuFloatComplex*)A, lda,
+		     (cuFloatComplex*)beta, (cuFloatComplex*)B, ldb,
+		     (cuFloatComplex*)C, ldc);
+}
+inline
+cublasStatus_t cublasGeam(cublasHandle_t handle,
+			  cublasOperation_t transa,
+			  cublasOperation_t transb,
+			  int m, int n,
+			  const thrust::complex<double> *alpha,
+			  const thrust::complex<double> *A, int lda,
+			  const thrust::complex<double> *beta,
+			  const thrust::complex<double> *B, int ldb,
+			  thrust::complex<double> *C, int ldc) {
+  return cublasZgeam(handle, transa, transb, m, n,
+		     (cuDoubleComplex*)alpha,
+		     (cuDoubleComplex*)A, lda,
+		     (cuDoubleComplex*)beta,
+		     (cuDoubleComplex*)B, ldb,
+		     (cuDoubleComplex*)C, ldc);
+}
